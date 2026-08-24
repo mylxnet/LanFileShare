@@ -1,5 +1,8 @@
 # LanFileShare · 局域网文件快传
 
+<img width="398" height="546" alt="image" src="https://github.com/user-attachments/assets/34756a44-d3a8-4a3d-a0d7-4df8ff4b094f" />
+
+
 > 📲 打开应用、二维码一开，手机扫码就能把照片/文档传到电脑，自动按手机分组、按日期归档，无需注册、无需安装 App。
 
 ---
