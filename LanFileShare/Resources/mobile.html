@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#2563EB">
+<title>发送文件到电脑</title>
+<style>
+  :root {
+    --blue: #2563EB;
+    --blue-dark: #1D4ED8;
+    --green: #10B981;
+    --red: #DC2626;
+    --text: #1F2937;
+    --muted: #6B7280;
+    --border: #E5E7EB;
+    --bg: #F9FAFB;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  .container {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 16px;
+    padding-bottom: 100px;
+  }
+
+  /* 头部 */
+  .header {
+    text-align: center;
+    padding: 24px 0 16px;
+  }
+  .header .emoji { font-size: 48px; }
+  .header h1 { font-size: 22px; font-weight: 600; margin: 8px 0 4px; }
+  .header .device { color: var(--muted); font-size: 14px; }
+
+  /* 选择区 */
+  .drop-zone {
+    background: white;
+    border: 2px dashed var(--blue);
+    border-radius: 14px;
+    padding: 32px 16px;
+    text-align: center;
+    margin: 16px 0;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .drop-zone:active { background: #EFF6FF; }
+  .drop-zone .icon { font-size: 36px; }
+  .drop-zone .hint { color: var(--blue); font-size: 15px; font-weight: 600; margin-top: 8px; }
+  .drop-zone .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .drop-zone.hidden { display: none; }
+
+  /* 文件列表 */
+  .file-list {
+    background: white;
+    border-radius: 14px;
+    margin: 16px 0;
+    overflow: hidden;
+  }
+  .file-list.hidden { display: none; }
+  .file-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .file-row:last-child { border-bottom: 0; }
+  .file-row .name {
+    flex: 1; font-size: 14px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .file-row .name small { color: var(--muted); font-size: 11px; display: block; }
+  .file-row .remove {
+    background: transparent; border: 0; color: var(--red);
+    font-size: 20px; cursor: pointer; padding: 4px 8px;
+  }
+  .file-row .status {
+    font-size: 12px;
+    color: var(--muted);
+    min-width: 50px;
+    text-align: right;
+  }
+  .file-row .status.done { color: var(--green); font-weight: 600; }
+  .file-row .status.fail { color: var(--red); font-weight: 600; }
+  .file-row .status.uploading { color: var(--blue); }
+
+  /* 进度条 */
+  .progress {
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 6px;
+  }
+  .progress .bar {
+    height: 100%;
+    background: var(--blue);
+    width: 0%;
+    transition: width .15s;
+  }
+
+  /* 主按钮 */
+  .main-btn {
+    width: 100%;
+    background: var(--blue);
+    color: white;
+    border: 0;
+    padding: 16px;
+    border-radius: 28px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, .25);
+  }
+  .main-btn:disabled { background: #ccc; box-shadow: none; cursor: not-allowed; }
+  .main-btn:active:not(:disabled) { background: var(--blue-dark); }
+  .main-btn.hidden { display: none; }
+
+  /* 完成态 */
+  .done-screen { display: none; text-align: center; padding: 40px 16px; }
+  .done-screen.show { display: block; }
+  .done-screen .big-emoji { font-size: 80px; }
+  .done-screen h2 { font-size: 22px; margin: 16px 0 8px; color: var(--green); }
+  .done-screen .summary { color: var(--muted); font-size: 14px; }
+  .done-screen button {
+    margin-top: 24px;
+    background: white;
+    color: var(--blue);
+    border: 2px solid var(--blue);
+    padding: 12px 24px;
+    border-radius: 24px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  /* 隐藏 input */
+  input[type=file] { display: none; }
+
+  /* 错误条幅 */
+  .alert {
+    background: #FEE2E2;
+    color: var(--red);
+    padding: 12px;
+    border-radius: 8px;
+    margin: 12px 0;
+    font-size: 13px;
+  }
+  .alert.hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="emoji">📁</div>
+    <h1>发送文件到电脑</h1>
+    <div class="device" id="deviceTag">连接中…</div>
+  </div>
+
+  <div class="alert hidden" id="alert"></div>
+
+  <label class="drop-zone" id="dropZone">
+    <div>
+      <div class="icon">👆</div>
+      <div class="hint">点击选择文件</div>
+      <div class="sub">可选择多张图片或文档</div>
+    </div>
+    <input type="file" id="fileInput" multiple
+           accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.rtf,.csv,.zip,.rar,.7z">
+  </label>
+
+  <div class="file-list hidden" id="fileList"></div>
+
+  <button class="main-btn hidden" id="uploadBtn">📤 开始上传</button>
+
+  <div class="done-screen" id="doneScreen">
+    <div class="big-emoji">✅</div>
+    <h2>上传完成</h2>
+    <div class="summary" id="doneSummary"></div>
+    <button onclick="resetAll()">继续上传</button>
+  </div>
+
+</div>
+
+<script>
+/* ========== 设备名 ==========
+   localStorage 设计：
+     deviceName     = "用户1"      （本机名，浏览器缓存里持久存在）
+     lastUserNum    = 1            （下一个新设备会用 lastUserNum+1 命名）
+*/
+function getDeviceName() {
+  let name = localStorage.getItem('deviceName');
+  if (!name) {
+    let last = parseInt(localStorage.getItem('lastUserNum') || '0', 10);
+    last = isNaN(last) ? 0 : last;
+    name = '用户' + (last + 1);
+    localStorage.setItem('lastUserNum', String(last + 1));
+    localStorage.setItem('deviceName', name);
+  }
+  return name;
+}
+
+document.getElementById('deviceTag').textContent = getDeviceName() + ' · 已连接';
+
+/* ========== 文件状态 ========== */
+const allFiles = [];   // { file, status, error }
+
+const dropZone  = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileList  = document.getElementById('fileList');
+const uploadBtn = document.getElementById('uploadBtn');
+const doneScreen = document.getElementById('doneScreen');
+const doneSummary = document.getElementById('doneSummary');
+const alertBox = document.getElementById('alert');
+
+function showAlert(msg) {
+  alertBox.textContent = msg;
+  alertBox.classList.remove('hidden');
+  setTimeout(() => alertBox.classList.add('hidden'), 5000);
+}
+
+function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+  return (bytes / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+}
+
+function renderFileList() {
+  fileList.innerHTML = '';
+  if (allFiles.length === 0) {
+    fileList.classList.add('hidden');
+    uploadBtn.classList.add('hidden');
+    dropZone.classList.remove('hidden');
+    return;
+  }
+  fileList.classList.remove('hidden');
+  dropZone.classList.add('hidden');
+  uploadBtn.classList.remove('hidden');
+
+  let pendingCount = allFiles.filter(f => f.status === 'pending').length;
+  uploadBtn.disabled = pendingCount === 0;
+  uploadBtn.textContent = pendingCount > 0 ? `📤 上传 ${pendingCount} 个文件` : '✅ 全部完成';
+
+  allFiles.forEach((item, idx) => {
+    const row = document.createElement('div');
+    row.className = 'file-row';
+
+    const left = document.createElement('div');
+    left.style.flex = '1';
+    left.style.minWidth = '0';
+
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = item.file.name;
+    const size = document.createElement('small');
+    size.textContent = fmtSize(item.file.size);
+    name.appendChild(size);
+
+    if (item.status === 'uploading') {
+      const prog = document.createElement('div');
+      prog.className = 'progress';
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      bar.style.width = (item.progress || 0) + '%';
+      prog.appendChild(bar);
+      left.appendChild(name);
+      left.appendChild(prog);
+    } else {
+      left.appendChild(name);
+    }
+
+    const status = document.createElement('div');
+    status.className = 'status';
+    if (item.status === 'pending') status.textContent = '等待';
+    else if (item.status === 'uploading') status.textContent = (item.progress || 0) + '%';
+    else if (item.status === 'done') { status.textContent = '完成'; status.classList.add('done'); }
+    else if (item.status === 'fail') { status.textContent = '失败'; status.classList.add('fail'); }
+
+    row.appendChild(left);
+    row.appendChild(status);
+
+    if (item.status === 'pending') {
+      const rm = document.createElement('button');
+      rm.className = 'remove';
+      rm.textContent = '✕';
+      rm.onclick = () => removeFile(idx);
+      row.appendChild(rm);
+    }
+    fileList.appendChild(row);
+  });
+}
+
+function removeFile(idx) {
+  allFiles.splice(idx, 1);
+  renderFileList();
+}
+
+function resetAll() {
+  allFiles.length = 0;
+  doneScreen.classList.remove('show');
+  renderFileList();
+}
+
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => {
+  const files = Array.from(e.target.files || []);
+  files.forEach(f => allFiles.push({ file: f, status: 'pending', progress: 0 }));
+  fileInput.value = '';
+  renderFileList();
+});
+
+/* ========== 上传 ========== */
+uploadBtn.addEventListener('click', async () => {
+  const device = getDeviceName();
+  const queue = allFiles.filter(f => f.status === 'pending');
+  if (queue.length === 0) return;
+
+  uploadBtn.disabled = true;
+  uploadBtn.textContent = '上传中…';
+
+  // 最多 3 个并发上传
+  const concurrency = 3;
+  let cursor = 0;
+  let success = 0;
+  let fail = 0;
+
+  async function worker() {
+    while (cursor < queue.length) {
+      const myIdx = cursor++;
+      const item = queue[myIdx];
+      const origIdx = allFiles.indexOf(item);
+      item.status = 'uploading';
+      item.progress = 0;
+      renderFileList();
+      try {
+        await uploadOne(item, device);
+        item.status = 'done';
+        item.progress = 100;
+        success++;
+      } catch (err) {
+        item.status = 'fail';
+        item.error = err.message || String(err);
+        fail++;
+      }
+      renderFileList();
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+  // 完成态
+  doneSummary.textContent = `成功 ${success} 个${fail > 0 ? '，失败 ' + fail + ' 个' : ''}`;
+  doneScreen.classList.add('show');
+
+  // 如果全部失败，提示
+  if (success === 0 && fail > 0) {
+    showAlert('所有文件上传失败，请检查电脑端是否还开着应用');
+  }
+});
+
+function uploadOne(item, deviceName) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/upload', true);
+    xhr.setRequestHeader('X-Device-Id', deviceName);
+    xhr.timeout = 0; // 不超时（允许大文件）
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        item.progress = Math.round((e.loaded / e.total) * 100);
+        renderFileList();
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const resp = JSON.parse(xhr.responseText);
+          if (resp.success) resolve(resp);
+          else reject(new Error(resp.error || '服务器拒绝'));
+        } catch (e) { reject(new Error('响应解析失败')); }
+      } else {
+        let msg = `HTTP ${xhr.status}`;
+        try { msg = JSON.parse(xhr.responseText).error || msg; } catch {}
+        reject(new Error(msg));
+      }
+    };
+    xhr.onerror = () => reject(new Error('网络错误'));
+    xhr.ontimeout = () => reject(new Error('上传超时'));
+
+    const fd = new FormData();
+    fd.append('file', item.file, item.file.name);
+    xhr.send(fd);
+  });
+}
+
+renderFileList();
+</script>
+</body>
+</html>

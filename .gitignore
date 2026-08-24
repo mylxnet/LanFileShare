@@ -1,0 +1,21 @@
+# Build 输出
+bin/
+obj/
+publish/
+dist/
+
+# VS 用户文件
+.vs/
+*.user
+*.suo
+
+# 临时
+[Dd]ebug/
+[Rr]elease/
+
+# 日志 & 配置（用户首次运行后会生成在 %APPDATA%\LanFileShare\）
+*.log
+
+# 系统
+.DS_Store
+Thumbs.db

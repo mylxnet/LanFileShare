@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- WPF 桌面应用 -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <!-- 关键决策：不开启 UseWindowsForms。
+         .NET 8 自带 Microsoft.Win32.OpenFolderDialog，纯 WPF 的文件夹选择器，
+         避免 WPF / WinForms 共存带来的命名空间冲突。
+         唯一需要 WinForms 的地方是系统托盘（NotifyIcon），我们用 WPF 替代实现（见 Services/TrayIcon.cs）。 -->
+
+    <!-- C# 12 风格 -->
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>12.0</LangVersion>
+
+    <!-- 通用属性 -->
+    <RootNamespace>LanFileShare</RootNamespace>
+    <AssemblyName>LanFileShare</AssemblyName>
+    <Product>LanFileShare</Product>
+    <AssemblyTitle>局域网文件快传</AssemblyTitle>
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <Company>LanFileShare</Company>
+    <Copyright>Copyright © 2024</Copyright>
+    <NeutralLanguage>zh-CN</NeutralLanguage>
+
+    <!-- 单文件自包含发布相关默认值（可在 csproj 或命令行覆盖） -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 第三方依赖 -->
+    <PackageReference Include="QRCoder" Version="1.6.0" />
+    <!-- 系统托盘图标：纯 WPF 实现，无 WinForms 依赖。
+         此包多目标 net6.0-windows 和 net4.6.2，nuget 兼容 .NET 8。
+         来源：https://www.nuget.org/packages/Hardcodet.NotifyIcon.Wpf -->
+    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 把手机端 Web 页面作为嵌入资源，编译进 EXE，无外部文件依赖 -->
+    <EmbeddedResource Include="Resources\mobile.html">
+      <LogicalName>LanFileShare.Resources.mobile.html</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>
