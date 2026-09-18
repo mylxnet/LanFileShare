@@ -61,4 +61,10 @@ public sealed class SettingsStore
     public static string GetLogsDir() => Path.Combine(AppDataDir, "logs");
 
     public static string GetConfigPath() => SettingsPath;
+
+    /// <summary>
+    /// 取本机局域网 IPv4（用于二维码显示）。
+    /// 统一委托给 IpDiscovery（单一实现，避免多份逻辑漂移）。
+    /// </summary>
+    public string GetOrComputePrimaryIp() => IpDiscovery.GetLocalIp();
 }

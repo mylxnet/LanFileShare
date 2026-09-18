@@ -17,11 +17,24 @@ public partial class App : Application
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         Services.Logger.Error("未捕获异常", e.Exception);
-        MessageBox.Show(
-            $"程序内部异常：\n{e.Exception.Message}\n\n应用会继续运行，但本次操作可能未完成。",
-            "错误",
-            MessageBoxButton.OK,
-            MessageBoxImage.Error);
+        try
+        {
+            // 显式 owner：主窗口隐藏到托盘后仍可用；不可用则回退 ownerless。
+            // MessageBox 自身失败也不能把进程弹死（记日志即可）。
+            var owner = Current?.MainWindow;
+            if (owner == null || !owner.IsLoaded || !owner.IsVisible)
+                owner = null;
+            MessageBox.Show(
+                owner,
+                $"程序内部异常：\n{e.Exception.Message}\n\n应用会继续运行，但本次操作可能未完成。",
+                "错误",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        catch (Exception notifyEx)
+        {
+            Services.Logger.Error("错误弹窗显示失败", notifyEx);
+        }
         e.Handled = true;
     }
 }

@@ -42,11 +42,7 @@ public sealed class TrayIcon : IDisposable
         menu.Items.Add(new Separator());
 
         var aboutItem = new MenuItem { Header = "关于" };
-        aboutItem.Click += (_, _) => MessageBox.Show(
-            "局域网文件快传 v1.0.0\n\n手机扫码把照片 / 文档传到电脑，\n无需注册、无需安装 App。\n\n关闭后仍在后台运行，可右键托盘图标退出。",
-            "关于",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+        aboutItem.Click += (_, _) => ShowAbout();
         menu.Items.Add(aboutItem);
 
         var exitItem = new MenuItem { Header = "退出" };
@@ -57,41 +53,57 @@ public sealed class TrayIcon : IDisposable
         _notify.TrayMouseDoubleClick += (_, _) => _showMainWindow();
     }
 
+    /// <summary>
+    /// 显示"关于"弹窗。显式用主窗口做 owner（主窗口只是隐藏，仍可用），
+    /// 不可用时回退 ownerless；弹窗本身失败也不能拖垮进程（托盘图标仍在）。
+    /// </summary>
+    private void ShowAbout()
+    {
+        Logger.Info("Tray about dialog requested");
+        try
+        {
+            var owner = System.Windows.Application.Current?.MainWindow;
+            if (owner == null || !owner.IsLoaded || !owner.IsVisible)
+                owner = null; // 隐藏窗口场景：交给 Win32 用桌面做父窗口
+            MessageBox.Show(
+                owner,
+                "局域网文件快传 v1.0.0\n\n手机扫码把照片 / 文档传到电脑，\n无需注册、无需安装 App。\n\n关闭后仍在后台运行，可右键托盘图标退出。",
+                "关于",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("关于弹窗失败（不影响应用运行）", ex);
+        }
+    }
+
     public void ShowBalloon(string title, string text, BalloonIcon icon = BalloonIcon.Info)
     {
         _notify.ShowBalloonTip(title, text, icon);
     }
 
     /// <summary>
-    /// 程序运行时画一个 32x32 蓝色圆角图标，无外部 .ico 依赖。
+    /// 程序运行时画一个 32x32 图标（蓝色 QR 风格 + 绿色上传箭头），无外部 .ico 依赖。
     /// </summary>
     private static System.Drawing.Icon BuildAppIcon()
     {
-        using var bmp = new System.Drawing.Bitmap(32, 32);
-        using (var g = System.Drawing.Graphics.FromImage(bmp))
-        {
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            using var bg = new System.Drawing.Drawing2D.LinearGradientBrush(
-                new System.Drawing.Rectangle(0, 0, 32, 32),
-                System.Drawing.Color.FromArgb(255, 37, 99, 235),
-                System.Drawing.Color.FromArgb(255, 124, 58, 237), 45f);
-            using var path = new System.Drawing.Drawing2D.GraphicsPath();
-            int r = 6;
-            path.AddArc(0, 0, r, r, 180, 90);
-            path.AddArc(32 - r, 0, r, r, 270, 90);
-            path.AddArc(32 - r, 32 - r, r, r, 0, 90);
-            path.AddArc(0, 32 - r, r, r, 90, 90);
-            path.CloseFigure();
-            g.FillPath(bg, path);
-            g.FillRectangle(System.Drawing.Brushes.White, 8, 8, 6, 6);
-            g.FillRectangle(System.Drawing.Brushes.White, 18, 8, 6, 6);
-            g.FillRectangle(System.Drawing.Brushes.White, 8, 18, 6, 6);
-            g.FillRectangle(System.Drawing.Brushes.White, 16, 16, 4, 4);
-            g.FillRectangle(System.Drawing.Brushes.White, 22, 18, 2, 2);
-            g.FillRectangle(System.Drawing.Brushes.White, 18, 22, 6, 2);
-        }
+        // 1) 从 WPF embedded resource 加载 PNG（在 Resources/appicon.png）
+        var uri = new Uri("pack://application:,,,/Resources/appicon.png");
+        var info = System.Windows.Application.GetResourceStream(uri);
+
+        // 2) 解码为 System.Drawing.Bitmap 并缩到 32x32
+        using var src = new System.Drawing.Bitmap(info.Stream);
+        var bmp = new System.Drawing.Bitmap(src, new System.Drawing.Size(32, 32));
+
+        // 3) GetHicon 拿到原生 handle，再克隆 Icon（这样 bmp 释放不影响 Icon）
         var hIcon = bmp.GetHicon();
-        return System.Drawing.Icon.FromHandle(hIcon);
+        var icon = (System.Drawing.Icon)System.Drawing.Icon.FromHandle(hIcon).Clone();
+        // 释放临时资源
+        System.Drawing.Icon.FromHandle(hIcon).Dispose();
+        bmp.Dispose();
+        src.Dispose();
+        return icon;
     }
 
     public void Dispose()

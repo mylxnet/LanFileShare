@@ -2,7 +2,9 @@
 bin/
 obj/
 publish/
-dist/
+# dist 里的 ZIP 分发件需要推 GitHub，只忽略目录内其它产物
+dist/*
+!dist/*.zip
 
 # VS 用户文件
 .vs/
@@ -15,6 +17,14 @@ dist/
 
 # 日志 & 配置（用户首次运行后会生成在 %APPDATA%\LanFileShare\）
 *.log
+
+# 构建脚本日志（build.ps1）与预览宿主上传目录
+.build-logs/
+preview-uploads/
+.freebuff/preview-*.log*
+
+# Freebuff 本机预览工具元数据（thread 专属，不入库）
+.freebuff/
 
 # 系统
 .DS_Store

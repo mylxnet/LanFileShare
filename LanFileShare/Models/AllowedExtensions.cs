@@ -18,9 +18,9 @@ public static class AllowedExtensions
         ".zip", ".rar", ".7z"
     };
 
-    /// <summary>用于 HTML &lt;input accept&gt; 属性</summary>
+    /// <summary>用于 HTML &lt;input accept&gt; 属性。必须与上方白名单同步（与 Set 完全一致）。</summary>
     public const string HtmlAccept =
-        "image/*," +
+        "image/*," +   // 覆盖 .jpg/.jpeg/.png/.gif/.bmp/.webp/.heic/.heif/.tiff
         ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx," +
         ".txt,.md,.rtf,.csv," +
         ".zip,.rar,.7z";

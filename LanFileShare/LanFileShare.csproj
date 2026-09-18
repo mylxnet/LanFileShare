@@ -20,11 +20,11 @@
     <AssemblyName>LanFileShare</AssemblyName>
     <Product>LanFileShare</Product>
     <AssemblyTitle>局域网文件快传</AssemblyTitle>
-    <Version>1.0.0</Version>
-    <FileVersion>1.0.0.0</FileVersion>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <Version>1.1.0</Version>
+    <FileVersion>1.1.0.0</FileVersion>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
     <Company>LanFileShare</Company>
-    <Copyright>Copyright © 2024</Copyright>
+    <Copyright>Copyright © 2024-2026</Copyright>
     <NeutralLanguage>zh-CN</NeutralLanguage>
 
     <!-- 单文件自包含发布相关默认值（可在 csproj 或命令行覆盖） -->
@@ -44,10 +44,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 把手机端 Web 页面作为嵌入资源，编译进 EXE，无外部文件依赖 -->
-    <EmbeddedResource Include="Resources\mobile.html">
-      <LogicalName>LanFileShare.Resources.mobile.html</LogicalName>
-    </EmbeddedResource>
+    <!-- mobile.html 已经内联到 MobileHtml.cs，不再作为 EmbeddedResource -->
+    <!-- 应用图标（嵌入资源，给 MainWindow.Icon 用） -->
+    <Resource Include="Resources\appicon.png" />
   </ItemGroup>
 
 </Project>

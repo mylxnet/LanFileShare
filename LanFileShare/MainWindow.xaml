@@ -5,7 +5,8 @@
         Width="420" Height="560"
         ResizeMode="CanMinimize"
         WindowStartupLocation="CenterScreen"
-        Background="White">
+        Background="White"
+        Icon="/Resources/appicon.png">
     <Grid Margin="24,20,24,20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>  <!-- 标题 -->

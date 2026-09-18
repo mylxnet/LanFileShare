@@ -29,7 +29,8 @@ public static class IpDiscovery
             // 虚拟网卡常见特征
             var name = ni.Name.ToLowerInvariant();
             if (name.Contains("hyper-v") || name.Contains("vmware") || name.Contains("virtualbox") ||
-                name.Contains("docker") || name.Contains("wsl") || name.Contains("bluetooth"))
+                name.Contains("docker") || name.Contains("wsl") || name.Contains("bluetooth") ||
+                name.Contains("npcap") || name.Contains("vmnet"))
                 continue;
 
             var props = ni.GetIPProperties();
