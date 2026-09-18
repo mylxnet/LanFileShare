@@ -20,9 +20,9 @@
     <AssemblyName>LanFileShare</AssemblyName>
     <Product>LanFileShare</Product>
     <AssemblyTitle>局域网文件快传</AssemblyTitle>
-    <Version>1.1.1</Version>
-    <FileVersion>1.1.1.0</FileVersion>
-    <AssemblyVersion>1.1.1.0</AssemblyVersion>
+    <Version>1.1.2</Version>
+    <FileVersion>1.1.2.0</FileVersion>
+    <AssemblyVersion>1.1.2.0</AssemblyVersion>
     <Company>LanFileShare</Company>
     <Copyright>Copyright © 2024-2026</Copyright>
     <NeutralLanguage>zh-CN</NeutralLanguage>
