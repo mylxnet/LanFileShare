@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private TcpHttpServer? _httpServer;
     private TrayIcon? _tray;
     private bool _reallyClose;
+    private bool _resourcesDisposed;
 
     public MainWindow()
     {
@@ -47,6 +48,7 @@ public partial class MainWindow : Window
                 if (string.IsNullOrEmpty(_settings.Current.SavePath))
                 {
                     MessageBox.Show("No save folder selected, the app will exit.", "Info", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    _reallyClose = true;
                     Application.Current.Shutdown();
                     return;
                 }
@@ -251,11 +253,13 @@ public partial class MainWindow : Window
 
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (_reallyClose) return;
-        e.Cancel = true;
-        Hide();
-        _tray?.ShowBalloon("Running in background", "Double-click tray to show window. Right-click to exit.");
-        Logger.Info("Window hidden to tray");
+        if (!_reallyClose)
+        {
+            _reallyClose = true;
+            Logger.Info("Window closing; shutting down services");
+        }
+
+        DisposeResources();
     }
 
     private void ShowWindow()
@@ -273,9 +277,20 @@ public partial class MainWindow : Window
     private void ExitApp()
     {
         _reallyClose = true;
-        try { _httpServer?.Stop(); } catch { }
-        try { _httpServer?.Dispose(); } catch { }
-        try { _tray?.Dispose(); } catch { }
+        DisposeResources();
         Dispatcher.Invoke(() => Application.Current.Shutdown());
+    }
+
+    private void DisposeResources()
+    {
+        if (_resourcesDisposed)
+            return;
+
+        _resourcesDisposed = true;
+        try { _httpServer?.Stop(); } catch (Exception ex) { Logger.Error("停止 HTTP 服务失败", ex); }
+        try { _httpServer?.Dispose(); } catch (Exception ex) { Logger.Error("释放 HTTP 服务失败", ex); }
+        try { _tray?.Dispose(); } catch (Exception ex) { Logger.Error("释放托盘图标失败", ex); }
+        _httpServer = null;
+        _tray = null;
     }
 }

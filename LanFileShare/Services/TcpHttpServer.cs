@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -33,6 +34,7 @@ public class TcpHttpServer
     private readonly FileReceiver _receiver;
     private TcpListener _listener = null!;
     private CancellationTokenSource _cts = null!;
+    private readonly ConcurrentDictionary<TcpClient, byte> _activeClients = new();
 
     /// <summary>实际 listen 的端口</summary>
     public int Port => _port;
@@ -110,7 +112,18 @@ public class TcpHttpServer
             }
             var remote = client.Client.RemoteEndPoint?.ToString() ?? "?";
             Logger.Info($"Accepted connection from {remote}");
-            _ = Task.Run(() => SafeHandle(client));
+            _activeClients.TryAdd(client, 0);
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await SafeHandle(client);
+                }
+                finally
+                {
+                    _activeClients.TryRemove(client, out _);
+                }
+            });
         }
     }
 
@@ -357,6 +370,10 @@ Logger.Info($"[{method} {path}] device={deviceId}, contentLength={contentLength}
     {
         try { _cts?.Cancel(); } catch { /* ignore */ }
         try { _listener?.Stop(); } catch { /* ignore */ }
+        foreach (var client in _activeClients.Keys)
+        {
+            try { client.Close(); } catch { /* ignore */ }
+        }
     }
 
     public void Dispose()

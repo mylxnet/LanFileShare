@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using Hardcodet.Wpf.TaskbarNotification;
@@ -7,7 +8,7 @@ namespace LanFileShare.Services;
 
 /// <summary>
 /// 系统托盘图标：用 Hardcodet.Wpf.TaskbarNotification 实现（纯 WPF，零 WinForms 依赖）。
-/// 主窗口关闭时调用 Hide() 隐藏到托盘；右键菜单 / 双击恢复。
+/// 应用运行期间提供恢复窗口、关于和退出菜单。
 /// </summary>
 public sealed class TrayIcon : IDisposable
 {
@@ -67,7 +68,7 @@ public sealed class TrayIcon : IDisposable
                 owner = null; // 隐藏窗口场景：交给 Win32 用桌面做父窗口
             MessageBox.Show(
                 owner,
-                "局域网文件快传 v1.0.0\n\n手机扫码把照片 / 文档传到电脑，\n无需注册、无需安装 App。\n\n关闭后仍在后台运行，可右键托盘图标退出。",
+                $"局域网文件快传 v{GetApplicationVersion()}\nby Mr lin\n\n手机扫码把照片 / 文档传到电脑，\n无需注册、无需安装 App。",
                 "关于",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -76,6 +77,11 @@ public sealed class TrayIcon : IDisposable
         {
             Logger.Error("关于弹窗失败（不影响应用运行）", ex);
         }
+    }
+
+    private static string GetApplicationVersion()
+    {
+        return Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "未知版本";
     }
 
     public void ShowBalloon(string title, string text, BalloonIcon icon = BalloonIcon.Info)
