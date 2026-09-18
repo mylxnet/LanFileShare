@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media.Imaging;
@@ -25,8 +26,14 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        VersionText.Text = $"v{GetApplicationVersion()} · by Mr lin";
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
+    }
+
+    private static string GetApplicationVersion()
+    {
+        return Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "未知版本";
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)

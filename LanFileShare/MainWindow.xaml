@@ -17,13 +17,18 @@
         </Grid.RowDefinitions>
 
         <!-- 标题 -->
-        <TextBlock Grid.Row="0"
-                   Text="📲 局域网文件快传"
-                   FontSize="18"
-                   FontWeight="SemiBold"
-                   Foreground="{StaticResource TextPrimary}"
-                   HorizontalAlignment="Center"
-                   Margin="0,0,0,12"/>
+        <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,12">
+            <TextBlock Text="📲 局域网文件快传"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="{StaticResource TextPrimary}"
+                       HorizontalAlignment="Center"/>
+            <TextBlock x:Name="VersionText"
+                       TextAlignment="Center"
+                       Foreground="{StaticResource TextMuted}"
+                       FontSize="11"
+                       Margin="0,2,0,0"/>
+        </StackPanel>
 
         <!-- 二维码区 -->
         <Border Grid.Row="1"
