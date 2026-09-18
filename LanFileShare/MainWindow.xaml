@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="局域网文件快传"
         Width="420" Height="560"
+        MinWidth="420" MinHeight="620"
         ResizeMode="CanMinimize"
         WindowStartupLocation="CenterScreen"
         Background="White"
@@ -34,7 +35,7 @@
         <Border Grid.Row="1"
                 Background="{StaticResource BgSubtle}"
                 CornerRadius="12"
-                Padding="20"
+                Padding="16"
                 Margin="0,0,0,16">
             <StackPanel VerticalAlignment="Center">
                 <Border Background="White"
@@ -51,9 +52,12 @@
                 <TextBlock x:Name="UrlText"
                            Text=""
                            HorizontalAlignment="Center"
+                           MaxWidth="340"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
                            Foreground="{StaticResource TextMuted}"
                            FontSize="12"
-                           Margin="0,12,0,0"
+                           Margin="0,8,0,0"
                            FontFamily="Consolas, JetBrains Mono, monospace"/>
             </StackPanel>
         </Border>
