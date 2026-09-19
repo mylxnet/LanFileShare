@@ -24,7 +24,7 @@ namespace LanFileShare.Services;
 /// </summary>
 public sealed class FileReceiver
 {
-    private readonly string _saveRoot;
+    private string _saveRoot;
 
     /// <summary>单个上传请求体上限（256MB，防止恶意 Content-Length 无限喂字节）。</summary>
     public const long MaxBodyBytes = 256L * 1024 * 1024;
@@ -35,6 +35,14 @@ public sealed class FileReceiver
     public FileReceiver(string saveRoot)
     {
         _saveRoot = saveRoot;
+    }
+
+    public void UpdateSaveRoot(string saveRoot)
+    {
+        if (string.IsNullOrWhiteSpace(saveRoot))
+            throw new ArgumentException("保存路径不能为空", nameof(saveRoot));
+        Interlocked.Exchange(ref _saveRoot, saveRoot);
+        Logger.Info($"[FileReceiver] save root updated: {saveRoot}");
     }
 
     public sealed class SavedFile
@@ -57,8 +65,7 @@ public sealed class FileReceiver
     /// <summary>
     /// 从 NetworkStream 流式接收并解析 multipart，逐块写盘。
     /// </summary>
-    /// <returns>(保存成功数量, 错误信息)</returns>
-    public async Task<(int count, string error)> HandleUploadAsync(NetworkStream stream, long contentLength, string deviceId, string contentType)
+    public async Task<Result> HandleUploadAsync(NetworkStream stream, long contentLength, string deviceId, string contentType)
     {
         Logger.Info($"[FileReceiver] enter: contentLength={contentLength}, deviceId={deviceId}, contentType={contentType}");
         try
@@ -66,12 +73,12 @@ public sealed class FileReceiver
             if (contentLength <= 0)
             {
                 Logger.Warn("[FileReceiver] contentLength<=0, rejecting");
-                return (0, "missing Content-Length");
+                return Failure("missing Content-Length");
             }
             if (contentLength > MaxBodyBytes)
             {
                 Logger.Warn($"[FileReceiver] body too large: {contentLength} > {MaxBodyBytes}");
-                return (0, $"文件过大：单次请求上限 {MaxBodyBytes / 1024 / 1024}MB");
+                return Failure($"文件过大：单次请求上限 {MaxBodyBytes / 1024 / 1024}MB");
             }
 
             // ===== 目录穿越防御：归一化后最终路径必须仍在保存根内 =====
@@ -83,13 +90,13 @@ public sealed class FileReceiver
             if (!string.IsNullOrWhiteSpace(deviceId) && deviceId.Trim().All(c => c == '.'))
             {
                 Logger.Warn($"[FileReceiver] 纯点设备名（穿越尝试），拒绝: '{deviceId}'");
-                return (0, "无效的设备名");
+                return Failure("无效的设备名");
             }
             var deviceDir = SafeJoin(_saveRoot, sanitizedDevice, DateTime.Now.ToString("yyyy-MM-dd"));
             if (deviceDir == null)
             {
                 Logger.Warn($"[FileReceiver] 设备名解析后逃逸保存根，拒绝: '{deviceId}' -> '{sanitizedDevice}'");
-                return (0, "无效的设备名");
+                return Failure("无效的设备名");
             }
 
             Logger.Info($"[FileReceiver] save-target: {deviceDir}");
@@ -99,20 +106,27 @@ public sealed class FileReceiver
             if (string.IsNullOrEmpty(boundary))
             {
                 Logger.Warn($"[FileReceiver] no boundary in Content-Type: {contentType}");
-                return (0, "不是有效的 multipart 上传");
+                return Failure("不是有效的 multipart 上传");
             }
 
             var dateFolder = Path.GetFileName(deviceDir)!;                          // yyyy-MM-dd
             var deviceFolder = Path.GetFileName(Path.GetDirectoryName(deviceDir))!; // sanitizedDevice
-            var saved = await StreamMultipartAsync(stream, contentLength, boundary, deviceDir, deviceFolder, dateFolder);
-            Logger.Info($"[FileReceiver] saved {saved} file(s)");
-            return (saved, "");
+            var result = await StreamMultipartAsync(stream, contentLength, boundary, deviceDir, deviceFolder, dateFolder);
+            Logger.Info($"[FileReceiver] saved {result.Files.Count} file(s)");
+            return result;
         }
         catch (Exception ex)
         {
             Logger.Error("HandleUploadAsync 异常", ex);
-            return (0, ex.Message);
+            return Failure(ex.Message);
         }
+    }
+
+    private static Result Failure(string error)
+    {
+        var result = new Result();
+        result.Errors.Add(error);
+        return result;
     }
 
     /// <summary>
@@ -214,7 +228,7 @@ public sealed class FileReceiver
             => at >= 0 && at + needle.Length <= Count && Span[at..].StartsWith(needle);
     }
 
-    private async Task<int> StreamMultipartAsync(
+    private async Task<Result> StreamMultipartAsync(
         NetworkStream stream, long bodyLength, string boundary,
         string deviceDir, string sanitizedDevice, string dateFolder)
     {
@@ -226,11 +240,12 @@ public sealed class FileReceiver
 
         var window = new Window();
         var state = ParseState.SeekBoundary;
-        int saved = 0;
+        var result = new Result();
         long consumed = 0;      // 已从网络读走的总字节
         FileStream? fs = null;  // 当前正在写的文件（null = 该 part 丢弃）
         long fsWritten = 0;
         string? fsPath = null;
+        string? originalName = null;
 
         try
         {
@@ -318,6 +333,7 @@ public sealed class FileReceiver
                             if (string.IsNullOrEmpty(origName))
                                 origName = $"upload-{DateTime.Now:HHmmssfff}.bin";
                             origName = SanitizeFileName(origName);
+                            originalName = origName;
 
                             // 直接拿到已用 CreateNew 打开的流（占位即打开，避免双开竞态）
                             (fs, fsPath) = OpenConflictFree(deviceDir, origName);
@@ -354,7 +370,16 @@ public sealed class FileReceiver
                                 fs.Dispose();
                                 fs = null;
                                 Logger.Info($"已保存: {fsPath} ({fsWritten} bytes), 设备={sanitizedDevice}");
-                                saved++;
+                                result.Files.Add(new SavedFile
+                                {
+                                    DeviceName = sanitizedDevice,
+                                    DateFolder = dateFolder,
+                                    OriginalName = originalName!,
+                                    SavedName = Path.GetFileName(fsPath!),
+                                    FullPath = fsPath!,
+                                    Size = fsWritten
+                                });
+                                originalName = null;
                             }
                             // 关键：终止 boundary 可能已在窗口里（小请求一次到齐），
                             // 必须 continue 让 SeekBoundary 立即处理；
@@ -388,7 +413,7 @@ public sealed class FileReceiver
                 try { File.Delete(p); } catch { } // 半截文件不留残骸
             }
         }
-        return saved;
+        return result;
     }
 
     /// <summary>

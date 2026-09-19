@@ -30,7 +30,7 @@ public class TcpHttpServer
 {
     private readonly int _port;
     private readonly SettingsStore _settingsStore;
-    private readonly Action _onUploadCompleted;
+    private readonly Action<IReadOnlyList<FileReceiver.SavedFile>> _onUploadCompleted;
     private readonly FileReceiver _receiver;
     private TcpListener _listener = null!;
     private CancellationTokenSource _cts = null!;
@@ -42,7 +42,7 @@ public class TcpHttpServer
     /// <summary>绑定的端口上 listen 0.0.0.0 的主 URL（用于二维码展示）</summary>
     public string PrimaryUrl { get; private set; } = "";
 
-    private TcpHttpServer(int port, SettingsStore settingsStore, Action onUploadCompleted)
+    private TcpHttpServer(int port, SettingsStore settingsStore, Action<IReadOnlyList<FileReceiver.SavedFile>> onUploadCompleted)
     {
         _port = port;
         _settingsStore = settingsStore;
@@ -55,7 +55,7 @@ public class TcpHttpServer
     /// 不像 HttpListener 这里 "失败" 就是真的失败，不会骗我们。
     /// </summary>
     /// <param name="primaryIp">二维码里用的主 IP（调用方已筛选过网卡）；null 则回退到 SettingsStore 的默认探测</param>
-    public static TcpHttpServer? TryStart(int port, SettingsStore settingsStore, Action onUploadCompleted, string? primaryIp = null)
+    public static TcpHttpServer? TryStart(int port, SettingsStore settingsStore, Action<IReadOnlyList<FileReceiver.SavedFile>> onUploadCompleted, string? primaryIp = null)
     {
         var server = new TcpHttpServer(port, settingsStore, onUploadCompleted);
 
@@ -283,7 +283,9 @@ Logger.Info($"[{method} {path}] device={deviceId}, contentLength={contentLength}
             catch { decodedDeviceId = deviceId; /* 兼容老版本（未来可直接传 ASCII 设备名） */ }
 
             Logger.Info($"[POST /upload] decoded-deviceId={decodedDeviceId}, calling receiver");
-            var (count, error) = await _receiver.HandleUploadAsync(stream, contentLength, decodedDeviceId, contentType);
+            var result = await _receiver.HandleUploadAsync(stream, contentLength, decodedDeviceId, contentType);
+            var count = result.Files.Count;
+            var error = result.Errors.FirstOrDefault() ?? "";
             Logger.Info($"[POST /upload] receiver returned: count={count}, error={error}");
             // 关键：字段名必须和 mobile.html 对得上 —— 用 "success" 和 "error"，别用 "ok"。
             var msg = count > 0
@@ -293,7 +295,7 @@ Logger.Info($"[{method} {path}] device={deviceId}, contentLength={contentLength}
             await WriteStatusAsync(stream, count > 0 ? 200 : 400, status, msg, "application/json; charset=utf-8");
             if (count > 0)
             {
-                _onUploadCompleted?.Invoke();
+                _onUploadCompleted?.Invoke(result.Files);
             }
         }
         catch (Exception ex)
@@ -301,6 +303,11 @@ Logger.Info($"[{method} {path}] device={deviceId}, contentLength={contentLength}
             Logger.Error("upload 处理异常", ex);
             await WriteStatusAsync(stream, 500, "Internal Server Error", $"{{\"success\":false,\"error\":\"{JsonEscape(ex.Message)}\"}}\n", "application/json; charset=utf-8");
         }
+    }
+
+    public void UpdateSavePath(string savePath)
+    {
+        _receiver.UpdateSaveRoot(savePath);
     }
 
     /// <summary>把任意字符串安全嵌入 JSON 字符串字面量（转义反斜杠/引号/控制字符）。</summary>

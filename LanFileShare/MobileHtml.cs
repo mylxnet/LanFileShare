@@ -772,7 +772,7 @@ async function uploadFiles(items) {
     $('doneIcon').textContent = '✓';
     $('doneTitle').textContent = '上传完成';
     $('doneSummary').textContent = `已成功上传 ${success} 个文件`;
-    $('doneActions').innerHTML = '<button class=""btn-primary"" onclick=""resetForMore()"">继续上传</button>';
+    $('doneActions').innerHTML = '<button class='btn-primary' onclick='resetForMore()'>继续上传</button>';
   } else if (success > 0 && fail > 0) {
     // === 部分成功：显示警告，但不显示""上传完成"" ===
     doneScreen.classList.add('show', 'partial');
@@ -780,8 +780,8 @@ async function uploadFiles(items) {
     $('doneTitle').textContent = '部分上传完成';
     $('doneSummary').textContent = `成功 ${success} 个 · 失败 ${fail} 个，请检查错误后重试`;
     $('doneActions').innerHTML = `
-      <button class=""btn-secondary"" onclick=""resetForMore()"">继续上传</button>
-      <button class=""btn-primary"" onclick=""retryAllFailed()"">重试失败项</button>
+      <button class='btn-secondary' onclick='resetForMore()'>继续上传</button>
+      <button class='btn-primary' onclick='retryAllFailed()'>重试失败项</button>
     `;
   } else {
     // === 全部失败：完全不显示""完成""标识，留在原页面 ===

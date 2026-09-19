@@ -49,8 +49,8 @@ internal static class Program
         return 0;
     }
 
-    private static void OnUploadCompleted()
-        => Console.WriteLine($"[PreviewHost] upload completed -> {DateTime.Now:HH:mm:ss}");
+    private static void OnUploadCompleted(IReadOnlyList<FileReceiver.SavedFile> files)
+        => Console.WriteLine($"[PreviewHost] upload completed ({files.Count} file(s)) -> {DateTime.Now:HH:mm:ss}");
 
     /// <summary>从可执行文件位置向上找含 LanFileShare.sln 的目录（仓库根），避免硬编码 bin 深度。</summary>
     private static string? FindWorkspaceRoot()

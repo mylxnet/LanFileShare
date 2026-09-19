@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.IO;
+using LanFileShare;
 using LanFileShare.Models;
 using LanFileShare.Services;
 
@@ -64,7 +65,8 @@ internal static class Program
         settings.Current.SavePath = _root;
 
         int port = GetFreePort();
-        var server = TcpHttpServer.TryStart(port, settings, () => { });
+        IReadOnlyList<FileReceiver.SavedFile> completedFiles = Array.Empty<FileReceiver.SavedFile>();
+        var server = TcpHttpServer.TryStart(port, settings, files => completedFiles = files);
         Check("服务启动成功", server != null, $"port={port}");
         if (server == null) return;
 
@@ -72,6 +74,9 @@ internal static class Program
         var r = await SendAsync(port, "GET / HTTP/1.1");
         Check("GET / -> 200", r.Status == 200);
         Check("GET / 含手机页标题", r.BodyText.Contains("发送文件到电脑"));
+        Check("完成页按钮 class 属性有效", r.BodyText.Contains("class='btn-primary'") &&
+            r.BodyText.Contains("class='btn-secondary'") &&
+            !r.BodyText.Contains("class=\"\"btn-"));
 
         // 2. 带查询串的首页（二维码工具常追加参数）
         r = await SendAsync(port, "GET /?from=qr HTTP/1.1");
@@ -95,6 +100,18 @@ internal static class Program
         var day = DateTime.Now.ToString("yyyy-MM-dd");
         var saved = Path.Combine(_root, "User1", day, "hello.txt");
         Check("hello.txt 落盘到 用户/日期 目录", File.Exists(saved), saved);
+        Check("上传回调包含已保存文件", completedFiles.Count == 1 && completedFiles[0].FullPath == saved);
+
+        // 7. 更改保存路径后，后续上传必须写入新目录
+        var updatedRoot = Path.Combine(_parent, "lfs-selftest-updated-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(updatedRoot);
+        settings.Current.SavePath = updatedRoot;
+        server.UpdateSavePath(updatedRoot);
+        resp = await UploadAsync(port, "after-path-change.txt", Encoding.UTF8.GetBytes("updated"), "User1");
+        var updatedSaved = Path.Combine(updatedRoot, "User1", day, "after-path-change.txt");
+        Check("更改保存路径后上传成功", resp.Success, resp.Raw);
+        Check("更改保存路径后写入新目录", File.Exists(updatedSaved) && !File.Exists(Path.Combine(_root, "User1", day, "after-path-change.txt")));
+        server.UpdateSavePath(_root);
 
         // 7. 中文文件名（浏览器以 UTF-8 原样放进 multipart header）
         resp = await UploadAsync(port, "测试文档.pdf", new byte[] { 1, 2, 3 }, "User1");
@@ -223,7 +240,6 @@ internal static class Program
     private static void Unit_Tests()
     {
         Console.WriteLine("\n-- 单元 --");
-
         Check("IsAllowed 大小写不敏感", AllowedExtensions.IsAllowed("A.JPG") && AllowedExtensions.IsAllowed("x.Pdf"));
         Check("IsAllowed 拒绝无扩展名", !AllowedExtensions.IsAllowed("noext"));
         Check("IsAllowed 拒绝双扩展伪装", !AllowedExtensions.IsAllowed("evil.jpg.exe"));
@@ -248,7 +264,7 @@ internal static class Program
         int p = GetFreePort();
         var blocker = new TcpListener(IPAddress.Any, p);
         blocker.Start();
-        var s = TcpHttpServer.TryStart(p, new SettingsStore(), () => { });
+        var s = TcpHttpServer.TryStart(p, new SettingsStore(), _ => { });
         Check("端口被占时 TryStart 返回 null", s == null, $"port={p}");
         blocker.Stop();
     }

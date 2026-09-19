@@ -240,6 +240,7 @@ public partial class MainWindow : Window
         {
             _settings.Current.SavePath = dlg.FolderName;
             _settings.Save();
+            _httpServer?.UpdateSavePath(_settings.Current.SavePath);
             PathText.Text = _settings.Current.SavePath;
             Logger.Info($"Save folder changed: {_settings.Current.SavePath}");
         }
@@ -253,9 +254,13 @@ public partial class MainWindow : Window
         return Path.Combine(userProfile, "Documents");
     }
 
-    private void OnUploadCompleted()
+    private void OnUploadCompleted(IReadOnlyList<FileReceiver.SavedFile> files)
     {
-        // silent receive, log only
+        Dispatcher.BeginInvoke(() =>
+        {
+            var names = string.Join("、", files.Select(file => file.SavedName));
+            _tray?.ShowBalloon("文件上传完成", $"{files.Count} 个文件已保存：{names}");
+        });
     }
 
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
