@@ -10,7 +10,7 @@
 # =============================================================
 
 param(
-    [string]$Version = "1.1.3",
+    [string]$Version = "1.1.4",
     [switch]$SkipZip = $false,
     [switch]$NoColor = $false  # set if terminal mangles ANSI colors
 )

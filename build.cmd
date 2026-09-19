@@ -5,7 +5,7 @@ REM  Forwards ALL stdout/stderr from PowerShell back to this cmd
 REM  window so you can copy errors directly.
 REM
 REM  Usage:
-REM      build.cmd                  (build with default version 1.1.3)
+REM      build.cmd                  (build with default version 1.1.4)
 REM      build.cmd 1.2.3            (custom version)
 REM      build.cmd 1.2.3 -SkipZip   (skip zip step)
 REM =============================================================
