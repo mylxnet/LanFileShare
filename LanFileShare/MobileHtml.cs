@@ -140,6 +140,13 @@ internal static class MobileHtml
     font-size: 12px;
   }
   .drop-zone.hidden { display: none; }
+  .file-input-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
 
   /* ==== File list ==== */
   .file-list {
@@ -408,11 +415,11 @@ internal static class MobileHtml
 
 <div class=""container"">
   <!-- Drop zone -->
-  <div class=""drop-zone"" id=""dropZone"">
+  <label class=""drop-zone"" id=""dropZone"" for=""fileInput"">
     <div class=""pic"">📁</div>
     <div class=""title"">点击选择文件</div>
     <div class=""subtitle"">支持图片和文档，可多选</div>
-  </div>
+  </label>
 
   <!-- 全局进度 -->
   <div class=""global-progress"" id=""globalProgress"">
@@ -448,7 +455,7 @@ internal static class MobileHtml
 
 <div class=""toast"" id=""toast""></div>
 
-<input type=""file"" id=""fileInput"" multiple style=""display:none""
+<input type=""file"" id=""fileInput"" class=""file-input-hidden"" multiple
        accept=""image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.rtf,.csv,.zip,.rar,.7z"">
 
 <script>
@@ -510,20 +517,22 @@ function makeModelName(model) {
 
 // 编号回退：沿用旧版 lastUserNum 递增（仅在型号完全拿不到时）
 function makeFallbackUserName() {
-  let last = parseInt(localStorage.getItem('lastUserNum') || '0', 10);
+  let last = 0;
+  try { last = parseInt(localStorage.getItem('lastUserNum') || '0', 10); } catch { }
   last += 1;
-  localStorage.setItem('lastUserNum', String(last));
+  try { localStorage.setItem('lastUserNum', String(last)); } catch { }
   return '用户' + last;
 }
 
 // 立即可用的名字：缓存命中 / 旧“用户N”占位；可能异步升级
 function getDeviceName() {
-  const saved = localStorage.getItem('deviceName');
+  let saved = null;
+  try { saved = localStorage.getItem('deviceName'); } catch { }
   if (saved && !/^用户\d+$/.test(saved)) return saved;          // 已是型号名
   const uaModel = detectModelFromUA();
   if (uaModel) {
     const name = makeModelName(uaModel);                         // 缓存缺失或旧“用户N” → 升级
-    localStorage.setItem('deviceName', name);
+    try { localStorage.setItem('deviceName', name); } catch { }
     return name;
   }
   if (saved) return saved;                                       // UA 拿不到，沿用旧编号
@@ -539,11 +548,12 @@ async function refineDeviceName() {
     if (!uad || !uad.getHighEntropyValues) return;
     const { model } = await uad.getHighEntropyValues(['model']);
     if (!isValidModel(model) || model === 'K') return;
-    const saved = localStorage.getItem('deviceName');
+    let saved = null;
+    try { saved = localStorage.getItem('deviceName'); } catch { }
     // 当前名已是“该型号+尾缀”则不动；否则换精确型号重新生成尾缀
     if (saved && saved.startsWith(model + '-')) return;
     deviceName = makeModelName(model);
-    localStorage.setItem('deviceName', deviceName);
+    try { localStorage.setItem('deviceName', deviceName); } catch { }
     const el = document.getElementById('deviceNameText');
     if (el) el.textContent = deviceName;
   } catch { /* 检测失败保持现有名字 */ }
@@ -552,7 +562,8 @@ async function refineDeviceName() {
 // 上传时取设备名：优先用 refine 升级后的精确名，否则用同步检测结果
 function getUploadDeviceName() { return deviceName || getDeviceName(); }
 
-document.getElementById('deviceNameText').textContent = deviceName;
+const deviceNameElement = document.getElementById('deviceNameText');
+if (deviceNameElement) deviceNameElement.textContent = deviceName || '未识别设备';
 refineDeviceName();
 
 /* ==== 文件管理 ==== */
@@ -662,8 +673,6 @@ function renderFileList() {
 }
 
 /* ==== 选择文件 ==== */
-$('dropZone').addEventListener('click', () => $('fileInput').click());
-
 $('fileInput').addEventListener('change', (e) => {
   const files = Array.from(e.target.files || []);
   files.forEach(f => allFiles.push({ file: f, status: 'pending', progress: 0 }));
@@ -772,7 +781,7 @@ async function uploadFiles(items) {
     $('doneIcon').textContent = '✓';
     $('doneTitle').textContent = '上传完成';
     $('doneSummary').textContent = `已成功上传 ${success} 个文件`;
-    $('doneActions').innerHTML = '<button class='btn-primary' onclick='resetForMore()'>继续上传</button>';
+    $('doneActions').innerHTML = `<button class=""btn-primary"" onclick=""resetForMore()"">继续上传</button>`;
   } else if (success > 0 && fail > 0) {
     // === 部分成功：显示警告，但不显示""上传完成"" ===
     doneScreen.classList.add('show', 'partial');
@@ -780,8 +789,8 @@ async function uploadFiles(items) {
     $('doneTitle').textContent = '部分上传完成';
     $('doneSummary').textContent = `成功 ${success} 个 · 失败 ${fail} 个，请检查错误后重试`;
     $('doneActions').innerHTML = `
-      <button class='btn-secondary' onclick='resetForMore()'>继续上传</button>
-      <button class='btn-primary' onclick='retryAllFailed()'>重试失败项</button>
+      <button class=""btn-secondary"" onclick=""resetForMore()"">继续上传</button>
+      <button class=""btn-primary"" onclick=""retryAllFailed()"">重试失败项</button>
     `;
   } else {
     // === 全部失败：完全不显示""完成""标识，留在原页面 ===

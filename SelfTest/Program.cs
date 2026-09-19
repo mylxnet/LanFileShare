@@ -74,9 +74,16 @@ internal static class Program
         var r = await SendAsync(port, "GET / HTTP/1.1");
         Check("GET / -> 200", r.Status == 200);
         Check("GET / 含手机页标题", r.BodyText.Contains("发送文件到电脑"));
-        Check("完成页按钮 class 属性有效", r.BodyText.Contains("class='btn-primary'") &&
-            r.BodyText.Contains("class='btn-secondary'") &&
+        Check("完成页按钮 class 属性有效", r.BodyText.Contains("class=\"btn-primary\"") &&
+            r.BodyText.Contains("class=\"btn-secondary\"") &&
             !r.BodyText.Contains("class=\"\"btn-"));
+        Check("设备名称有可靠初始化与回退", r.BodyText.Contains("deviceNameText") &&
+            r.BodyText.Contains("未识别设备") && r.BodyText.Contains("detectModelFromUA"));
+        Check("文件选择器使用移动端兼容 label", r.BodyText.Contains("<label class=\"drop-zone\"") &&
+            r.BodyText.Contains("for=\"fileInput\"") && r.BodyText.Contains("type=\"file\"") &&
+            !r.BodyText.Contains("style=\"display:none\""));
+        Check("文件选择器保留多选与类型过滤", r.BodyText.Contains("multiple") &&
+            r.BodyText.Contains("accept=\"image/*") && r.BodyText.Contains("fileInput').addEventListener('change'"));
 
         // 2. 带查询串的首页（二维码工具常追加参数）
         r = await SendAsync(port, "GET /?from=qr HTTP/1.1");
