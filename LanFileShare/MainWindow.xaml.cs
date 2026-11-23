@@ -2,12 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net;
-using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media.Imaging;
 using LanFileShare.Services;
 namespace LanFileShare;
@@ -22,6 +21,8 @@ public partial class MainWindow : Window
     private TrayIcon? _tray;
     private bool _reallyClose;
     private bool _resourcesDisposed;
+    private List<NetworkCandidate> _nicCandidates = new();
+    private NetworkCandidate? _selectedNic;
 
     public MainWindow()
     {
@@ -29,6 +30,7 @@ public partial class MainWindow : Window
         VersionText.Text = $"v{GetApplicationVersion()} · by Mr lin";
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
+        Activated += MainWindow_Activated;
     }
 
     private static string GetApplicationVersion()
@@ -45,20 +47,14 @@ public partial class MainWindow : Window
             // 1) 启动托盘
             _tray = new TrayIcon(ShowWindow, ExitApp);
 
-            // 2) 检查保存路径
+            // 2) 没有有效保存路径时不再弹窗打断，先把窗口交给用户，由界面选择
             if (string.IsNullOrEmpty(_settings.Current.SavePath) || !Directory.Exists(_settings.Current.SavePath))
             {
-                MessageBox.Show(
-                    "First time: please choose a folder to save files.\nYour choice will be remembered next time.",
-                    "Welcome", MessageBoxButton.OK, MessageBoxImage.Information);
-                ChooseAndSavePath();
-                if (string.IsNullOrEmpty(_settings.Current.SavePath))
-                {
-                    MessageBox.Show("No save folder selected, the app will exit.", "Info", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    _reallyClose = true;
-                    Application.Current.Shutdown();
-                    return;
-                }
+                PathText.Text = "（未选择保存路径，请点击更改）";
+                UrlText.Text = "请先选择保存目录";
+                NicButton.IsEnabled = false;
+                Logger.Info("未配置有效保存路径，等待用户在界面选择");
+                return;
             }
 
             // 3) 启动 HTTP 服务 + 生成二维码
@@ -77,8 +73,21 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task StartHttpServerAsync()
     {
-        // 统一 IP 发现：优先私网、过滤虚拟网卡与链路本地（IpDiscovery 内含多层兑底）
-        var primaryIp = IpDiscovery.GetLocalIp();
+        if (_httpServer != null) return;
+
+        // 枚举候选网卡：优先用上次手动选择的 IP，否则自动挑最佳
+        _nicCandidates = IpDiscovery.GetCandidates();
+        var preferredIp = _settings.Current.PreferredIp;
+        _selectedNic = _nicCandidates.FirstOrDefault(c => c.Ip == preferredIp)
+                       ?? _nicCandidates.FirstOrDefault();
+        var preferredMissing = !string.IsNullOrEmpty(preferredIp) && _selectedNic?.Ip != preferredIp;
+        if (preferredMissing)
+        {
+            // 上次选择的网卡已不存在，清掉记录，避免每次启动都提示
+            _settings.Current.PreferredIp = "";
+            _settings.Save();
+        }
+        var primaryIp = _selectedNic?.Ip ?? IpDiscovery.GetLocalIp();
         Logger.Info($"Primary LAN IP for QR: {primaryIp}");
 
         // 候选端口顺序：先 LastPort，然后向外顺延（+1, -1, +2, -2, ...），最后从头再扫
@@ -136,8 +145,22 @@ public partial class MainWindow : Window
         // ===== 生成 QR（二维码永远显示，让手机扫码试试）=====
         var url = server.PrimaryUrl;
         Logger.Info($"HTTP server ready, URL: {url}");
+        ShowQrAndUrl(url);
 
-        // 生成二维码（端口已确认）
+        PathText.Text = _settings.Current.SavePath;
+        UpdateNicButton();
+        if (_nicCandidates.Count == 0)
+            SetNicHint("未发现可用网卡");
+        else if (preferredMissing)
+            SetNicHint("原网卡不可用，已自动切换");
+        else
+            SetNicHint("");
+        await Task.CompletedTask;
+    }
+
+    /// <summary>渲染网址与二维码（切换网卡时复用）。</summary>
+    private void ShowQrAndUrl(string url)
+    {
         try
         {
             var png = QrGenerator.GeneratePng(url, size: 240);
@@ -150,15 +173,133 @@ public partial class MainWindow : Window
             img.Freeze();
             QrImage.Source = img;
             UrlText.Text = url;
+            UrlText.ToolTip = url;
         }
         catch (Exception ex)
         {
             Logger.Error("QR generation failed (server is fine, just no QR)", ex);
             UrlText.Text = url + "  (QR failed)";
+            UrlText.ToolTip = url;
+        }
+    }
+
+    /// <summary>网卡按钮文案：默认只显示「网卡」，手动选过之后才显示网卡名。</summary>
+    private void UpdateNicButton()
+    {
+        bool manual = !string.IsNullOrEmpty(_settings.Current.PreferredIp) && _selectedNic != null;
+        if (manual && _selectedNic != null)
+        {
+            NicButton.Content = _selectedNic.IsVirtual
+                ? $"{_selectedNic.InterfaceName} · 虚拟 ▾"
+                : $"{_selectedNic.InterfaceName} ▾";
+        }
+        else
+        {
+            NicButton.Content = "网卡 ▾";
+        }
+        NicButton.IsEnabled = _httpServer != null && _nicCandidates.Count > 0;
+    }
+
+    private void SetNicHint(string text)
+    {
+        NicHint.Text = text;
+        NicHint.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>单击「网卡」弹出候选菜单。</summary>
+    private void OnNicButtonClick(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu
+        {
+            PlacementTarget = NicButton,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+        };
+
+        if (_nicCandidates.Count == 0)
+        {
+            menu.Items.Add(new MenuItem { Header = "未发现可用网卡", IsEnabled = false });
+        }
+        else
+        {
+            foreach (var c in _nicCandidates)
+            {
+                var item = new MenuItem
+                {
+                    Header = c.Display,
+                    IsCheckable = true,
+                    IsChecked = _selectedNic?.Ip == c.Ip,
+                    Tag = c,
+                };
+                item.Click += OnNicMenuItemClick;
+                menu.Items.Add(item);
+            }
         }
 
-        PathText.Text = _settings.Current.SavePath;
-        await Task.CompletedTask;
+        menu.IsOpen = true;
+    }
+
+    /// <summary>用户手动选定网卡：保存选择、显示网卡名，并刷新地址与二维码。</summary>
+    private void OnNicMenuItemClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: NetworkCandidate item }) return;
+        if (_selectedNic?.Ip == item.Ip && _settings.Current.PreferredIp == item.Ip) return;
+
+        _selectedNic = item;
+        _settings.Current.PreferredIp = item.Ip;
+        _settings.Save();
+        Logger.Info($"用户选择网卡：{item.Ip}（{item.InterfaceName}）");
+
+        UpdateNicButton();
+        SetNicHint("");
+        UpdateUrlAndQr(item.Ip);
+    }
+
+    private void UpdateUrlAndQr(string ip)
+    {
+        if (_httpServer == null) return;
+        var url = $"http://{ip}:{_httpServer.Port}/";
+        Logger.Info($"网卡切换后 URL：{url}");
+        ShowQrAndUrl(url);
+    }
+
+    /// <summary>窗口重新激活时刷新网卡列表，兼容中途插网线 / 开热点。</summary>
+    private void MainWindow_Activated(object? sender, EventArgs e)
+    {
+        if (_httpServer == null) return;
+
+        var latest = IpDiscovery.GetCandidates();
+        if (latest.Select(c => c.Ip).SequenceEqual(_nicCandidates.Select(c => c.Ip))) return;
+
+        var currentIp = _selectedNic?.Ip ?? "";
+        _nicCandidates = latest;
+        bool stillThere = latest.Any(c => c.Ip == currentIp);
+
+        if (stillThere)
+        {
+            _selectedNic = latest.First(c => c.Ip == currentIp);
+            UpdateNicButton();
+            return;
+        }
+
+        // 原网卡已消失：回退到最佳候选，并清掉失效的偏好
+        bool wasManual = !string.IsNullOrEmpty(currentIp) && _settings.Current.PreferredIp == currentIp;
+        _selectedNic = latest.FirstOrDefault();
+        if (wasManual)
+        {
+            _settings.Current.PreferredIp = "";
+            _settings.Save();
+        }
+        UpdateNicButton();
+
+        if (_selectedNic != null)
+        {
+            SetNicHint(wasManual ? "原网卡不可用，已自动切换" : "");
+            UpdateUrlAndQr(_selectedNic.Ip);
+        }
+        else
+        {
+            SetNicHint("未发现可用网卡");
+        }
     }
 
     /// <summary>
@@ -223,12 +364,16 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnChangePathClick(object sender, RoutedEventArgs e)
+    private async void OnChangePathClick(object sender, RoutedEventArgs e)
     {
-        ChooseAndSavePath();
+        if (!ChooseAndSavePath()) return;
+
+        // 首次选择目录后才启动服务，避免二维码指向一个还不能接收的页面
+        if (_httpServer == null)
+            await StartHttpServerAsync();
     }
 
-    private void ChooseAndSavePath()
+    private bool ChooseAndSavePath()
     {
         var dlg = new Microsoft.Win32.OpenFolderDialog
         {
@@ -236,14 +381,14 @@ public partial class MainWindow : Window
             InitialDirectory = SafeInitialDir(_settings.Current.SavePath),
             Multiselect = false,
         };
-        if (dlg.ShowDialog() == true)
-        {
-            _settings.Current.SavePath = dlg.FolderName;
-            _settings.Save();
-            _httpServer?.UpdateSavePath(_settings.Current.SavePath);
-            PathText.Text = _settings.Current.SavePath;
-            Logger.Info($"Save folder changed: {_settings.Current.SavePath}");
-        }
+        if (dlg.ShowDialog() != true) return false;
+
+        _settings.Current.SavePath = dlg.FolderName;
+        _settings.Save();
+        _httpServer?.UpdateSavePath(_settings.Current.SavePath);
+        PathText.Text = _settings.Current.SavePath;
+        Logger.Info($"Save folder changed: {_settings.Current.SavePath}");
+        return true;
     }
 
     private static string SafeInitialDir(string? current)

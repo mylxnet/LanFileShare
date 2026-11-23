@@ -84,6 +84,9 @@ internal static class Program
             !r.BodyText.Contains("style=\"display:none\""));
         Check("文件选择器保留多选与类型过滤", r.BodyText.Contains("multiple") &&
             r.BodyText.Contains("accept=\"image/*") && r.BodyText.Contains("fileInput').addEventListener('change'"));
+        Check("微信内 9 张提示仅在微信内置浏览器显示", r.BodyText.Contains("id=\"wechatTip\"") &&
+            r.BodyText.Contains("微信内单次最多 9 张") &&
+            r.BodyText.Contains("/MicroMessenger/i.test(navigator.userAgent)"));
 
         // 2. 带查询串的首页（二维码工具常追加参数）
         r = await SendAsync(port, "GET /?from=qr HTTP/1.1");

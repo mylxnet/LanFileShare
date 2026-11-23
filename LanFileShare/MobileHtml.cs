@@ -139,6 +139,12 @@ internal static class MobileHtml
     color: var(--muted);
     font-size: 12px;
   }
+  .drop-zone .wechat-tip {
+    display: none;
+    color: #92400E;
+    font-size: 12px;
+    margin-top: 6px;
+  }
   .drop-zone.hidden { display: none; }
   .file-input-hidden {
     position: absolute;
@@ -419,6 +425,7 @@ internal static class MobileHtml
     <div class=""pic"">📁</div>
     <div class=""title"">点击选择文件</div>
     <div class=""subtitle"">支持图片和文档，可多选</div>
+    <div class=""wechat-tip"" id=""wechatTip"">微信内单次最多 9 张；用浏览器打开可多选，不限张数</div>
   </label>
 
   <!-- 全局进度 -->
@@ -860,6 +867,11 @@ function resetForMore() {
 }
 
 renderFileList();
+
+// 微信内置浏览器的相册选择器单次最多 9 张，仅在该环境下提示
+if (/MicroMessenger/i.test(navigator.userAgent)) {
+  $('wechatTip').style.display = 'block';
+}
 </script>
 </body>
 </html>

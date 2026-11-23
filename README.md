@@ -2,6 +2,8 @@
 
 > 📲 打开应用、二维码一开，手机扫码就能把照片/文档传到电脑，自动按手机分组、按日期归档，无需注册、无需安装 App。
 
+当前版本：**v1.1.5**　·　by Mr lin
+
 ---
 
 ## 🚀 首次运行（3 步必看）
@@ -9,8 +11,8 @@
 | 步骤 | 操作 |
 |------|------|
 | 1️⃣ **首次必须跑一次 setup.cmd** | 双击 `setup.cmd`（会自提权）—— 添加 Windows 防火墙放行规则 |
-| 2️⃣ **启动应用** | 双击 `dist\LanFileShare-v1.0.0-win-x64.exe`（或解压后跑同名 EXE）|
-| 3️⃣ **扫码传文件** | 选保存路径 → 出现二维码 → 手机扫码 |
+| 2️⃣ **启动应用** | 解压后双击 `LanFileShare.exe` |
+| 3️⃣ **扫码传文件** | 在窗口内点「更改…」选保存目录 → 出现二维码 → 手机扫码 |
 
 > ⚠️ **重要**：第一次启动时 Windows 会弹"是否允许网络访问"——**必须勾选"专用网络"和"家庭/工作网络"，点"允许访问"**。如果点了阻止，运行 `setup.cmd` 重置。
 
@@ -68,10 +70,10 @@ dotnet run --project .\LanFileShare -c Debug
 
 启动后行为：
 - 主窗口出现（420 × 560）
-- 首次使用会要求选择保存路径
-- 自动选择可用端口（50000-50999，避开 WinNAT/Hyper-V/System 等占用的 0-30000 区段），在窗口底部显示完整 URL
-- 关闭窗口 → 隐藏到系统托盘（不退出进程）
-- 右键托盘图标 → "退出" 才真正结束
+- 未设置保存目录时不再弹窗，窗口内提示「请先选择保存目录」，点「更改…」选好后自动启动服务并显示二维码
+- 自动选择可用端口（50000-50999，避开 WinNAT/Hyper-V/System 等占用的 0-30000 区段），地址显示在二维码下方
+- 地址左侧「网卡 ▾」可手动切换网卡；默认只显示地址，选定后显示网卡名（虚拟网卡带「虚拟」标注）
+- 关闭窗口 → 停止服务并退出进程；托盘图标在运行期间可双击唤回窗口、右键退出
 
 ---
 
@@ -79,24 +81,24 @@ dotnet run --project .\LanFileShare -c Debug
 
 **PowerShell**（推荐）
 ```powershell
-.\build.ps1 -Version 1.0.0
+.\build.ps1 -Version 1.1.5
 ```
 
 **cmd**（传统命令提示符）
 ```cmd
-build.cmd 1.0.0
+build.cmd 1.1.5
 ```
 
 构建流程：
 1. `dotnet publish` 编译为单文件 EXE（含自包含 .NET 运行时）
-2. 自动打包为 ZIP 放在 `dist/LanFileShare-v1.0.0-win-x64.zip`
+2. 自动打包为 ZIP 放在 `dist/LanFileShare-v1.1.5-win-x64.zip`
 
 预计产物：
 
 | 文件 | 大小 | 备注 |
 |------|------|------|
-| `publish/LanFileShare.exe` | ~10 MB | 临时构建产物 |
-| `dist/LanFileShare-v1.0.0-win-x64.zip` | ~5.6 MB | 唯一分发件 |
+| `publish/LanFileShare.exe` | ~68 MB | 临时构建产物 |
+| `dist/LanFileShare-v1.1.5-win-x64.zip` | ~63 MB | 唯一分发件（只作 Release 附件，不入 git） |
 
 ---
 
@@ -158,6 +160,10 @@ LanFileShare/
 
 服务器是 `TcpHttpServer`：直接在 `TcpListener` 上用用户态代码实现 HTTP（不走 HttpListener/http.sys，避免其 "静默绑定失败" 坑）。应用启动时扫描 `50000-50999` 范围（1000 个端口），自动选第一个空闲端口。低端口（0-30000）被各种 Windows 系统服务、Hyper-V 端口映射、WinNAT 等 "PID 4 (System)" 偷偷占着；50000+ 是 IANA 不分配的区段，绝少被任何系统服务占；如果上一次用的端口被占，会顺延到下一个空闲端口。
 
+### 网卡选择与地址显示
+
+二维码下方默认只显示访问地址；地址左侧「网卡 ▾」列出本机所有可用 IPv4（真实网卡在前、私网优先，虚拟网卡标「虚拟」）。手动选择后按钮显示网卡名、`settings.json` 记录 `preferredIp`，下次启动自动沿用；原网卡消失时自动回退到最佳候选并提示。窗口重新激活会刷新列表（中途插网线/开热点无需重启）。
+
 ### 文件类型白名单
 
 `Models/AllowedExtensions.cs` 中维护，只允许图片 + 常见文档格式。手机页 `accept` 属性由 `AllowedExtensions.HtmlAccept` 生成（mobile.html 与 MobileHtml.cs 两处同步），与服务端白名单保持一致。单请求体上限 256MB（`FileReceiver.MaxBodyBytes`），超限明确返回 400。
@@ -211,6 +217,12 @@ LanFileShare/
 ## 📜 许可证
 
 仅供个人学习与内部使用，请勿用于商业分发。
+
+---
+
+## 📝 更新日志
+
+完整版本记录见 [RELEASES.md](RELEASES.md)。当前 **v1.1.5**：多网卡手动选择、启动不再弹窗改为窗口内选目录、微信内置浏览器 9 张提示。
 
 ---
 

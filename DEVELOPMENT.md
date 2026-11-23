@@ -1,6 +1,6 @@
 # LanFileShare 开发文档
 
-> 版本 v1.1.0 · 更新日期 2026-09-18 · 面向本项目的二次开发者与维护者
+> 版本 v1.1.5 · 更新日期 2026-11-23 · 面向本项目的二次开发者与维护者
 
 ---
 
@@ -26,10 +26,12 @@
 
 Windows 桌面工具（WPF, .NET 8）：启动后显示局域网 URL 二维码，手机微信/浏览器扫码打开上传页，即可把照片/文档传到电脑，自动按 **设备/日期** 归档。无需注册、无需安装手机 App。
 
-### 1.2 核心特性（v1.1.0）
+### 1.2 核心特性（v1.1.5）
 
 - 自研 TCP 用户态 HTTP 服务（不依赖 HttpListener/http.sys，规避其静默绑定失败问题）
 - **流式 multipart 接收**：固定 1MB 滑动窗口，任意请求大小内存恒定，单请求上限 256MB
+- **多网卡手动选择**：地址左侧「网卡 ▾」列候选，选择持久化到 `preferredIp`，网卡消失自动回退
+- **启动不弹窗**：无有效保存目录时先显示窗口提示，用户在窗口内选目录后才启动服务与二维码
 - **设备目录 = 手机型号**（如 `2210132C-qwz4`），拿不到型号回退 `用户N`；同型号手机用随机尾缀区分
 - 中文文件名全程 UTF-8 正确保存；RFC 5987 `filename*` 支持
 - 目录穿越防御（归一化校验最终路径在保存根内）
@@ -134,17 +136,20 @@ Windows 桌面工具（WPF, .NET 8）：启动后显示局域网 URL 二维码�
 
 ### 3.3 `IpDiscovery`（Services/IpDiscovery.cs）
 
-枚举 `NetworkInterface`，过滤 Loopback / Down / 帧类型非 IPv4 / npcap / vmnet / Hyper-V / WSL / vEthernet 等虚拟网卡；多候选时优先私网段。**全项目唯一 IP 发现实现**（v1.1.0 前有三份：MainWindow、SettingsStore、IpDiscovery，已合并）。
+`GetCandidates()` 枚举 `NetworkInterface`，过滤 Loopback / Down / 链路本地 169.254.x，虚拟网卡（Hyper-V / vEthernet / VMware / WSL / Docker / VPN / 蓝牙等）标记 `IsVirtual` 并排在后面，真实网卡中私网优先。`GetLocalIp()` 返回列表第一项（自动模式）。
+
+主窗口启动时：`_nicCandidates = IpDiscovery.GetCandidates()`；优先匹配 `settings.PreferredIp`，否则取第一项；手动选择后把 IP 存入 `PreferredIp` 并刷新二维码 URL。窗口 `Activated` 时重新枚举，候选集合变化则同步按钮与地址；原网卡消失时清空 `PreferredIp` 并回退，提示「原网卡不可用，已自动切换」。
 
 ### 3.4 `SettingsStore` / `Logger`
 
-- 配置存 `%APPDATA%\LanFileShare\settings.json`：SavePath、LastPort、PrimaryIp 等；Load 容错（损坏回默认）
+- 配置存 `%APPDATA%\LanFileShare\settings.json`：`savePath`、`lastPort`、`preferredIp`、`minimizeToTray`；Load 容错（损坏回默认）
 - 日志同目录 `logs/app-yyyy-MM-dd.log`；注意：`Logger` 每条 `File.AppendAllText` 开关文件，上传热路径里别加高频日志
 
 ### 3.5 `MobileHtml`（前端）
 
 - **两份必须同步**：`Resources/mobile.html`（源）与 `MobileHtml.cs`（`"` → `""` 转义的逐字字符串）。改 html 后重新生成 cs（见 §11.3）
 - 页面结构：渐变头部（设备名）→ 文件选择区 → 待传列表 → 并发 3 路上传 → 结果反馈
+- 微信内置浏览器（UA 含 `MicroMessenger`）才显示「单次最多 9 张」提示；默认用 CSS `.wechat-tip { display:none }` 隐藏，**不要**用内联 `style="display:none"`（SelfTest 会拦，且隐藏文件输入会导致部分手机无法唤起选择器）
 - 设备名：见 §5；`X-Device-Id` 头 = `encodeURIComponent(deviceName)`（中文安全过 ASCII 头通道）
 
 ---
@@ -227,13 +232,13 @@ multipart body：每个 part 一个文件，part 头 filename 支持 UTF-8 原�
 
 ### 7.1 SelfTest（零依赖端到端）
 
-`SelfTest/Program.cs`，34 项用例，**真实 socket 打真实 TcpHttpServer**（不是 mock）：
+`SelfTest/Program.cs`，42 项用例，**真实 socket 打真实 TcpHttpServer**（不是 mock）：
 
 ```powershell
 dotnet run --project SelfTest -c Debug    # 退出码 0 = 全绿
 ```
 
-覆盖：GET 路由全表、query 剥离、multipart 上传落盘归档、中文文件名、`filename*`、并发同名、白名单（`.exe`/双扩展）、非 multipart 拒绝、256MB 超限 400、`..`/纯点设备名拒绝、非法字符清洗、含空格型号设备名、8MB 大文件逐字节校验、48KB 跨块 part 头、超长头拒绝、截断请求无残留。
+覆盖：GET 路由全表、query 剥离、multipart 上传落盘归档、中文文件名、`filename*`、并发同名、白名单（`.exe`/双扩展）、非 multipart 拒绝、256MB 超限 400、`..`/纯点设备名拒绝、非法字符清洗、含空格型号设备名、8MB 大文件逐字节校验、48KB 跨块 part 头、超长头拒绝、截断请求无残留、移动端 label 选择器、微信 9 张提示。
 
 ### 7.2 PreviewHost（预览宿主）
 
@@ -264,7 +269,7 @@ dotnet run --project SelfTest -c Debug          # 回归
 ### 8.2 发布单文件
 
 ```powershell
-.\build.ps1                    # 默认 -Version 1.1.0
+.\build.ps1                    # 默认 -Version 1.1.5
 .\build.ps1 -Version 1.2.0     # 指定版本（写入程序集元数据 + ZIP 文件名）
 ```
 
@@ -272,8 +277,8 @@ dotnet run --project SelfTest -c Debug          # 回归
 
 | 文件 | 说明 |
 |---|---|
-| `publish/LanFileShare.exe` | 自包含单文件（含 .NET 运行时，约 10MB 级） |
-| `dist/LanFileShare-v1.1.0-win-x64.zip` | 分发件（单 EXE 压缩） |
+| `publish/LanFileShare.exe` | 自包含单文件（含 .NET 运行时，约 68MB） |
+| `dist/LanFileShare-v1.1.5-win-x64.zip` | 分发件（单 EXE 压缩，约 63MB；仅作 Release 附件，不入 git） |
 
 csproj 关键属性：`PublishSingleFile=true`、`SelfContained=true`、`RuntimeIdentifier=win-x64`、`IncludeNativeLibrariesForSelfExtract=true`。
 
@@ -287,6 +292,30 @@ csproj 关键属性：`PublishSingleFile=true`、`SelfContained=true`、`Runtime
 ---
 
 ## 9. 版本历史
+
+### v1.1.5（2026-11-23）
+
+- 新增多网卡手动选择：地址左侧「网卡 ▾」，默认只显示地址，选择后显示网卡名（虚拟网卡标注「虚拟」），偏好持久化
+- 启动流程改造：无有效保存目录不再弹窗，窗口内提示并由用户点「更改…」选择，选好后启动服务与二维码
+- 微信内置浏览器提示：手机页显示「单次最多 9 张；用浏览器打开可多选，不限张数」
+- 运行中更换保存目录后，后续上传即写入新目录
+
+### v1.1.4（2026-09-19）
+
+- 上传路径更新与完成反馈修复（`TcpHttpServer.UpdateSavePath`）
+- 手机页设备信息展示与文件选择器修复
+
+### v1.1.3（2026-09-18）
+
+- 修复主窗口二维码下方地址被裁切
+
+### v1.1.2（2026-09-18）
+
+- 主窗口显示版本号与作者署名
+
+### v1.1.1（2026-09-18）
+
+- 主窗口布局调整与稳定性修复
 
 ### v1.1.0（2026-09-18）
 

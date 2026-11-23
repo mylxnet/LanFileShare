@@ -49,16 +49,39 @@
                            Stretch="Uniform"
                            SnapsToDevicePixels="True"/>
                 </Border>
-                <TextBlock x:Name="UrlText"
-                           Text=""
+                <!-- 网卡与地址同一行：默认只显示地址，手动选过网卡后才显示网卡名 -->
+                <Grid HorizontalAlignment="Center" Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="NicButton"
+                            Grid.Column="0"
+                            Content="网卡 ▾"
+                            Style="{StaticResource GhostButton}"
+                            Foreground="{StaticResource TextMuted}"
+                            FontSize="12"
+                            Padding="6,2"
+                            MaxWidth="110"
+                            IsEnabled="False"
+                            VerticalAlignment="Center"
+                            Click="OnNicButtonClick"/>
+                    <TextBlock x:Name="UrlText"
+                               Grid.Column="1"
+                               Text=""
+                               VerticalAlignment="Center"
+                               Margin="8,0,0,0"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{StaticResource TextMuted}"
+                               FontSize="12"
+                               FontFamily="Consolas, JetBrains Mono, monospace"/>
+                </Grid>
+                <TextBlock x:Name="NicHint"
+                           Visibility="Collapsed"
                            HorizontalAlignment="Center"
-                           MaxWidth="340"
-                           TextWrapping="Wrap"
-                           TextAlignment="Center"
-                           Foreground="{StaticResource TextMuted}"
-                           FontSize="12"
-                           Margin="0,8,0,0"
-                           FontFamily="Consolas, JetBrains Mono, monospace"/>
+                           FontSize="11"
+                           Margin="0,6,0,0"
+                           Foreground="{StaticResource TextMuted}"/>
             </StackPanel>
         </Border>
 

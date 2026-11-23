@@ -2,9 +2,8 @@
 bin/
 obj/
 publish/
-# dist 里的 ZIP 分发件需要推 GitHub，只忽略目录内其它产物
-dist/*
-!dist/*.zip
+# dist 是二进制分发产物，只作为 Release 附件，不入 git
+dist/
 
 # VS 用户文件
 .vs/
