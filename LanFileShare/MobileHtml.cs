@@ -95,6 +95,16 @@ internal static class MobileHtml
     background: #34D399;
     box-shadow: 0 0 8px #34D399;
   }
+  .hero .device #deviceNameText {
+    border-bottom: 1px dashed rgba(255,255,255,0.55);
+    cursor: pointer;
+  }
+  .hero .device-tip {
+    font-size: 11px;
+    opacity: 0.75;
+    margin-top: 6px;
+    position: relative;
+  }
 
   /* ==== 内容卡片 ==== */
   .container {
@@ -416,7 +426,8 @@ internal static class MobileHtml
     <svg viewBox=""0 0 24 24""><path d=""M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.18L19.82 8 12 11.82 4.18 8 12 4.18zM4 9.27l7 3.5v6.96l-7-3.5V9.27zm9 10.46v-6.96l7-3.5v6.96l-7 3.5z""/></svg>
   </div>
   <h1>发送文件到电脑</h1>
-  <div class=""device""><span id=""deviceNameText"">用户1</span> · 已连接</div>
+  <div class=""device""><span id=""deviceNameText"">识别中…</span> · 已连接</div>
+  <div class=""device-tip"">点击设备名可修改（作为电脑上的文件夹名）</div>
 </div>
 
 <div class=""container"">
@@ -498,13 +509,11 @@ function isValidModel(m) {
     && /^[A-Za-z0-9 ._,\-()\u4e00-\u9fa5]+$/.test(m);
 }
 
-// 同步检测：UA 正则提取安卓型号；iOS 的 UA 永远只说 iPhone（拿不到具体型号）
+// 同步检测：UA 正则提取安卓型号；iOS 的 UA 永远只说 iPhone（拿不到具体型号），交给特征名
 function detectModelFromUA() {
   const ua = navigator.userAgent;
   const m = ua.match(/Android[^;]*;\s*([^;)]+?)\s*(?:Build\/|\))/);
   if (m && isValidModel(m[1]) && m[1] !== 'K' && m[1] !== 'wv') return m[1].trim();
-  if (/iPhone|iPod/.test(ua)) return 'iPhone';
-  if (/iPad/.test(ua)) return 'iPad';
   return null;
 }
 
@@ -522,35 +531,82 @@ function makeModelName(model) {
   return model + '-' + randomSuffix();
 }
 
-// 编号回退：沿用旧版 lastUserNum 递增（仅在型号完全拿不到时）
-function makeFallbackUserName() {
-  let last = 0;
-  try { last = parseInt(localStorage.getItem('lastUserNum') || '0', 10); } catch { }
-  last += 1;
-  try { localStorage.setItem('lastUserNum', String(last)); } catch { }
-  return '用户' + last;
+// 兜底命名：用「平台 + 屏幕分辨率」描述设备特征，再拼稳定随机尾缀。
+// Android Chrome 的 UA 已精简为 ""Android 10; K""，纯 HTTP 页面又拿不到 Client Hints 精确型号，
+// 因此不再退回无意义的「用户N」，而是给出可辨识的特征名（如 Android-1080x2400-k3f9）。
+function makeTraitName() {
+  const ua = navigator.userAgent;
+  let platform = 'Device';
+  const iPadLike = /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  if (/iPhone|iPod/.test(ua)) platform = 'iPhone';
+  else if (iPadLike) platform = 'iPad';
+  else if (/HarmonyOS|OpenHarmony/i.test(ua)) platform = 'Harmony';
+  else if (/Android/i.test(ua)) platform = 'Android';
+  else if (/Windows/i.test(ua)) platform = 'Windows';
+  else if (/Macintosh|Mac OS X/i.test(ua)) platform = 'Mac';
+  else if (/Linux/i.test(ua)) platform = 'Linux';
+  const w = Math.round(screen.width);
+  const h = Math.round(screen.height);
+  return platform + '-' + w + 'x' + h + '-' + randomSuffix();
 }
 
-// 立即可用的名字：缓存命中 / 旧“用户N”占位；可能异步升级
+// 旧版无意义占位名（用户N / 无分辨率的 iPhone-abcd）需要淘汰重建
+function isLegacyDeviceName(name) {
+  return /^用户\d+$/.test(name) || /^(iPhone|iPad)-[a-z0-9]{4}$/.test(name);
+}
+
+// 用户是否手动改过名（手动名优先级最高，异步精检不再覆盖）
+function isManualDeviceName() {
+  try { return localStorage.getItem('deviceNameManual') === '1'; } catch { return false; }
+}
+
+// 清理用户输入：与电脑端 SanitizeFolder 对齐，去掉文件名非法字符
+function sanitizeDeviceName(name) {
+  if (typeof name !== 'string') return '';
+  const cleaned = name.trim().replace(/[\\/:*?""<>|\u0000-\u001F]/g, '').slice(0, 30).trim();
+  if (!cleaned || /^\.+$/.test(cleaned)) return '';
+  return cleaned;
+}
+
+// 立即可用的名字：手动名 / 缓存名 / UA 型号 / 设备特征名
 function getDeviceName() {
   let saved = null;
   try { saved = localStorage.getItem('deviceName'); } catch { }
-  if (saved && !/^用户\d+$/.test(saved)) return saved;          // 已是型号名
+  if (saved && isManualDeviceName()) return saved;                // 手动命名，永不覆盖
+  if (saved && isLegacyDeviceName(saved)) saved = null;           // 淘汰旧占位名
+  if (saved) return saved;                                        // 已是可用名字
   const uaModel = detectModelFromUA();
   if (uaModel) {
-    const name = makeModelName(uaModel);                         // 缓存缺失或旧“用户N” → 升级
+    const name = makeModelName(uaModel);
     try { localStorage.setItem('deviceName', name); } catch { }
     return name;
   }
-  if (saved) return saved;                                       // UA 拿不到，沿用旧编号
-  return makeFallbackUserName();
+  const trait = makeTraitName();
+  try { localStorage.setItem('deviceName', trait); } catch { }
+  return trait;
+}
+
+let deviceName = getDeviceName();
+
+// 统一写名字：manual=true 表示用户手动命名，后续自动检测不再覆盖
+function setDeviceName(name, manual) {
+  const cleaned = sanitizeDeviceName(name);
+  if (!cleaned) return false;
+  deviceName = cleaned;
+  try {
+    localStorage.setItem('deviceName', cleaned);
+    if (manual) localStorage.setItem('deviceNameManual', '1');
+  } catch { }
+  const el = document.getElementById('deviceNameText');
+  if (el) el.textContent = cleaned;
+  return true;
 }
 
 // 异步精确检测：userAgentData.getHighEntropyValues（新版 Chromium UA 精简后型号只剩占位符 K）
-// 拿到精确型号后重写 deviceName（尾缀重新生成）；deviceName 变量同步更新，让之后的上传立刻用新名
-let deviceName = getDeviceName();
+// 注意：该 API 仅在 HTTPS / localhost 等安全上下文可用，纯 HTTP 会直接跳过
 async function refineDeviceName() {
   try {
+    if (isManualDeviceName()) return;
     const uad = navigator.userAgentData;
     if (!uad || !uad.getHighEntropyValues) return;
     const { model } = await uad.getHighEntropyValues(['model']);
@@ -559,10 +615,7 @@ async function refineDeviceName() {
     try { saved = localStorage.getItem('deviceName'); } catch { }
     // 当前名已是“该型号+尾缀”则不动；否则换精确型号重新生成尾缀
     if (saved && saved.startsWith(model + '-')) return;
-    deviceName = makeModelName(model);
-    try { localStorage.setItem('deviceName', deviceName); } catch { }
-    const el = document.getElementById('deviceNameText');
-    if (el) el.textContent = deviceName;
+    setDeviceName(makeModelName(model), false);
   } catch { /* 检测失败保持现有名字 */ }
 }
 
@@ -570,7 +623,17 @@ async function refineDeviceName() {
 function getUploadDeviceName() { return deviceName || getDeviceName(); }
 
 const deviceNameElement = document.getElementById('deviceNameText');
-if (deviceNameElement) deviceNameElement.textContent = deviceName || '未识别设备';
+if (deviceNameElement) {
+  deviceNameElement.textContent = deviceName || '未识别设备';
+  deviceNameElement.title = '点击修改设备名';
+  deviceNameElement.addEventListener('click', () => {
+    const input = window.prompt('修改设备名（会作为电脑上的文件夹名）', deviceName);
+    if (input === null) return;                                  // 取消
+    if (!setDeviceName(input, true)) {
+      window.alert('名称无效：不能为空，且不能包含 \\ / : * ? "" < > |');
+    }
+  });
+}
 refineDeviceName();
 
 /* ==== 文件管理 ==== */

@@ -1,6 +1,6 @@
 # LanFileShare 开发文档
 
-> 版本 v1.1.5 · 更新日期 2026-11-23 · 面向本项目的二次开发者与维护者
+> 版本 v1.1.6 · 更新日期 2026-11-23 · 面向本项目的二次开发者与维护者
 
 ---
 
@@ -26,13 +26,13 @@
 
 Windows 桌面工具（WPF, .NET 8）：启动后显示局域网 URL 二维码，手机微信/浏览器扫码打开上传页，即可把照片/文档传到电脑，自动按 **设备/日期** 归档。无需注册、无需安装手机 App。
 
-### 1.2 核心特性（v1.1.5）
+### 1.2 核心特性（v1.1.6）
 
 - 自研 TCP 用户态 HTTP 服务（不依赖 HttpListener/http.sys，规避其静默绑定失败问题）
 - **流式 multipart 接收**：固定 1MB 滑动窗口，任意请求大小内存恒定，单请求上限 256MB
 - **多网卡手动选择**：地址左侧「网卡 ▾」列候选，选择持久化到 `preferredIp`，网卡消失自动回退
 - **启动不弹窗**：无有效保存目录时先显示窗口提示，用户在窗口内选目录后才启动服务与二维码
-- **设备目录 = 手机型号**（如 `2210132C-qwz4`），拿不到型号回退 `用户N`；同型号手机用随机尾缀区分
+- **设备目录 = 设备名**：真实型号优先（如 `2210132C-qwz4`），取不到时用特征名（如 `Android-1080x2400-k3f9`），并支持点击改名；同型号手机用随机尾缀区分
 - 中文文件名全程 UTF-8 正确保存；RFC 5987 `filename*` 支持
 - 目录穿越防御（归一化校验最终路径在保存根内）
 - 同名文件自动 `(1)` `(2)` 重命名，并发上传 CreateNew 竞态安全
@@ -148,7 +148,7 @@ Windows 桌面工具（WPF, .NET 8）：启动后显示局域网 URL 二维码�
 ### 3.5 `MobileHtml`（前端）
 
 - **两份必须同步**：`Resources/mobile.html`（源）与 `MobileHtml.cs`（`"` → `""` 转义的逐字字符串）。改 html 后重新生成 cs（见 §11.3）
-- 页面结构：渐变头部（设备名）→ 文件选择区 → 待传列表 → 并发 3 路上传 → 结果反馈
+- 页面结构：渐变头部（设备名，可点击改名）→ 文件选择区 → 待传列表 → 并发 3 路上传 → 结果反馈
 - 微信内置浏览器（UA 含 `MicroMessenger`）才显示「单次最多 9 张」提示；默认用 CSS `.wechat-tip { display:none }` 隐藏，**不要**用内联 `style="display:none"`（SelfTest 会拦，且隐藏文件输入会导致部分手机无法唤起选择器）
 - 设备名：见 §5；`X-Device-Id` 头 = `encodeURIComponent(deviceName)`（中文安全过 ASCII 头通道）
 
@@ -190,23 +190,25 @@ multipart body：每个 part 一个文件，part 头 filename 支持 UTF-8 原�
 
 ## 5. 设备目录命名规则
 
-**目标格式**：`{保存根}/{手机型号}-{4位随机尾缀}/{yyyy-MM-dd}/文件`
+**目标格式**：`{保存根}/{设备名}/{yyyy-MM-dd}/文件`，设备名优先真实型号，其次设备特征名，最后用户手动命名。
 
 ### 5.1 检测优先级（mobile.html `getDeviceName` / `refineDeviceName`）
 
 | 优先级 | 来源 | 得到 | 说明 |
 |---|---|---|---|
-| 1 | `navigator.userAgentData.getHighEntropyValues(['model'])` | 真实型号 | Chromium 内核；新版 UA 精简后 UA 字符串里型号是占位符 `K`，只有此 API 有真值 |
-| 2 | UA 正则 `Android...; 型号 Build/` | 型号 | 旧版浏览器同步兜底；排除 `K` / `wv` |
-| 3 | UA 含 iPhone/iPad | `iPhone` / `iPad` | iOS 隐私限制，拿不到具体型号 |
-| 4 | 回退 | `用户N` | `lastUserNum` 递增（桌面浏览器访问等） |
+| 1 | `localStorage.deviceNameManual=1` + `deviceName` | 用户手动名 | 点击顶部设备名修改，优先级最高，自动检测不覆盖 |
+| 2 | `localStorage.deviceName`（非旧格式） | 缓存名 | 同一部手机永远同一目录 |
+| 3 | `navigator.userAgentData.getHighEntropyValues(['model'])` | 真实型号 | 仅 HTTPS/localhost 等安全上下文可用；纯 HTTP 下浏览器不提供 |
+| 4 | UA 正则 `Android...; 型号 Build/` | 型号 | 同步兜底；排除 `K` / `wv` |
+| 5 | 设备特征名 `平台-宽x高-尾缀` | 如 `Android-1080x2400-k3f9`、`iPhone-390x844-a1b2` | 纯 HTTP / UA 精简 / iOS 隐私限制时的可辨识名字（iOS 用 `maxTouchPoints` 区分 iPad） |
 
 ### 5.2 稳定性与升级
 
-- 型号 + 尾缀存 `localStorage.deviceName`，同一部手机永远同一目录；尾缀字符表去掉 `i/l/o/0/1`
-- 旧版 `用户N` 缓存 → 下次访问自动升级型号名（**旧目录文件原样保留**）
+- 名称 + 尾缀存 `localStorage.deviceName`，同一部手机永远同一目录；尾缀字符表去掉 `i/l/o/0/1`
+- 旧格式（`用户N`、无分辨率的 `iPhone-abcd`）自动淘汰重建（**旧目录文件原样保留**）
+- 手动命名写 `deviceNameManual=1`，异步 refine 不再覆盖；清缓存即恢复自动命名
 - 异步 refine 拿到更精确型号后重写名字并同步页面显示与上传变量
-- 型号白名单：`/^[A-Za-z0-9 ._,\-()\u4e00-\u9fa5]{2,40}$/`，非法（`../`、`a/b` 等）视为无型号
+- 型号白名单：`/^[A-Za-z0-9 ._,\-()\u4e00-\u9fa5]{2,40}$/`；手动名清理 `\ / : * ? " < > |`，限 30 字，纯点名拒绝
 
 ### 5.3 服务端防线
 
@@ -232,13 +234,13 @@ multipart body：每个 part 一个文件，part 头 filename 支持 UTF-8 原�
 
 ### 7.1 SelfTest（零依赖端到端）
 
-`SelfTest/Program.cs`，42 项用例，**真实 socket 打真实 TcpHttpServer**（不是 mock）：
+`SelfTest/Program.cs`，44 项用例，**真实 socket 打真实 TcpHttpServer**（不是 mock）：
 
 ```powershell
 dotnet run --project SelfTest -c Debug    # 退出码 0 = 全绿
 ```
 
-覆盖：GET 路由全表、query 剥离、multipart 上传落盘归档、中文文件名、`filename*`、并发同名、白名单（`.exe`/双扩展）、非 multipart 拒绝、256MB 超限 400、`..`/纯点设备名拒绝、非法字符清洗、含空格型号设备名、8MB 大文件逐字节校验、48KB 跨块 part 头、超长头拒绝、截断请求无残留、移动端 label 选择器、微信 9 张提示。
+覆盖：GET 路由全表、query 剥离、multipart 上传落盘归档、中文文件名、`filename*`、并发同名、白名单（`.exe`/双扩展）、非 multipart 拒绝、256MB 超限 400、`..`/纯点设备名拒绝、非法字符清洗、含空格型号设备名、8MB 大文件逐字节校验、48KB 跨块 part 头、超长头拒绝、截断请求无残留、移动端 label 选择器、微信 9 张提示、设备特征名兜底与手动改名。
 
 ### 7.2 PreviewHost（预览宿主）
 
@@ -269,7 +271,7 @@ dotnet run --project SelfTest -c Debug          # 回归
 ### 8.2 发布单文件
 
 ```powershell
-.\build.ps1                    # 默认 -Version 1.1.5
+.\build.ps1                    # 默认 -Version 1.1.6
 .\build.ps1 -Version 1.2.0     # 指定版本（写入程序集元数据 + ZIP 文件名）
 ```
 
@@ -278,7 +280,7 @@ dotnet run --project SelfTest -c Debug          # 回归
 | 文件 | 说明 |
 |---|---|
 | `publish/LanFileShare.exe` | 自包含单文件（含 .NET 运行时，约 68MB） |
-| `dist/LanFileShare-v1.1.5-win-x64.zip` | 分发件（单 EXE 压缩，约 63MB；仅作 Release 附件，不入 git） |
+| `dist/LanFileShare-v1.1.6-win-x64.zip` | 分发件（单 EXE 压缩，约 63MB；仅作 Release 附件，不入 git） |
 
 csproj 关键属性：`PublishSingleFile=true`、`SelfContained=true`、`RuntimeIdentifier=win-x64`、`IncludeNativeLibrariesForSelfExtract=true`。
 
@@ -292,6 +294,13 @@ csproj 关键属性：`PublishSingleFile=true`、`SelfContained=true`、`Runtime
 ---
 
 ## 9. 版本历史
+
+### v1.1.6（2026-11-23）
+
+- 修复手机浏览器（UA 精简、纯 HTTP）下设备名退化为「用户N」：改为 `平台-分辨率-尾缀` 特征名
+- iOS 设备名带分辨率区分（iPad 通过 `maxTouchPoints` 识别），淘汰旧的 `iPhone-abcd` 缓存
+- 手机页设备名支持点击手动改名，手动名优先且不被自动检测覆盖
+- 新增 2 项 SelfTest 用例（共 44 项）
 
 ### v1.1.5（2026-11-23）
 

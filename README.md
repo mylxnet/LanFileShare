@@ -2,7 +2,7 @@
 
 > 📲 打开应用、二维码一开，手机扫码就能把照片/文档传到电脑，自动按手机分组、按日期归档，无需注册、无需安装 App。
 
-当前版本：**v1.1.5**　·　by Mr lin
+当前版本：**v1.1.6**　·　by Mr lin
 
 ---
 
@@ -26,7 +26,7 @@
 2. Windows 防火墙弹窗 → 勾选"专用网络"和"家庭/工作网络"→ **允许访问**
 3. 看到二维码 → 用手机微信/浏览器扫码 → 选择文件 → 上传
 
-文件会按 `保存路径/用户N/2024-12-25/IMG_001.jpg` 这样归档，每次启动自动记住上次路径。
+文件会按 `保存路径/设备名/2024-12-25/IMG_001.jpg` 这样归档，每次启动自动记住上次路径。
 
 ---
 
@@ -81,24 +81,24 @@ dotnet run --project .\LanFileShare -c Debug
 
 **PowerShell**（推荐）
 ```powershell
-.\build.ps1 -Version 1.1.5
+.\build.ps1 -Version 1.1.6
 ```
 
 **cmd**（传统命令提示符）
 ```cmd
-build.cmd 1.1.5
+build.cmd 1.1.6
 ```
 
 构建流程：
 1. `dotnet publish` 编译为单文件 EXE（含自包含 .NET 运行时）
-2. 自动打包为 ZIP 放在 `dist/LanFileShare-v1.1.5-win-x64.zip`
+2. 自动打包为 ZIP 放在 `dist/LanFileShare-v1.1.6-win-x64.zip`
 
 预计产物：
 
 | 文件 | 大小 | 备注 |
 |------|------|------|
 | `publish/LanFileShare.exe` | ~68 MB | 临时构建产物 |
-| `dist/LanFileShare-v1.1.5-win-x64.zip` | ~63 MB | 唯一分发件（只作 Release 附件，不入 git） |
+| `dist/LanFileShare-v1.1.6-win-x64.zip` | ~63 MB | 唯一分发件（只作 Release 附件，不入 git） |
 
 ---
 
@@ -184,17 +184,18 @@ LanFileShare/
 
 同名文件自动加 `(1)`、`(2)` 前缀，不覆盖任何已有文件。
 
-### 设备名生成（手机型号优先）
+### 设备名生成（能拿型号就用型号，拿不到用设备特征名）
 
-目录名优先用手机型号（如 `2210132C-qwz4`、`Pixel 7 Pro-aywk`），拿不到再回退 `用户N`：
+目录名优先用手机型号（如 `2210132C-qwz4`、`Pixel 7 Pro-aywk`）：
 
-1. **异步精确检测**：`navigator.userAgentData.getHighEntropyValues(['model'])`（Chromium 内核：Chrome/微信 XWeb/Edge；新版 UA 精简后 UA 字符串里型号只剩占位符 `K`，只有这个 API 拿得到真实型号）
-2. **同步兑底**：UA 正则提取安卓型号（旧版浏览器仍带真实型号）；iOS 永远只报 `iPhone`（苹果隐私限制）
-3. **回退**：型号完全拿不到时沿用旧版 `用户N` 递增（桌面浏览器访问等场景）
+1. **异步精确检测**：`navigator.userAgentData.getHighEntropyValues(['model'])`（Chromium 内核；新版 UA 精简后型号只剩占位符 `K`，只有该 API 能拿到真实型号）
+2. **同步兜底**：UA 正则提取安卓型号（旧版浏览器仍带真实型号）
+3. **特征名回退**：Android 精简 UA / iOS 拿不到型号时，用「平台-分辨率-尾缀」（如 `Android-1080x2400-k3f9`、`iPhone-390x844-a1b2`），不再出现无意义的 `用户N`
+4. **手动改名**：点击页面顶部设备名即可改名（存本地并优先于自动检测），作为最终兜底
 
-为区分两台同型号手机，型号后追加 4 位随机尾缀（去易混淆字符），与检测结果一起存 localStorage，同一部手机永远用同一个目录。旧版生成的 `用户N` 会在拿到型号后自动升级覆盖（旧目录和文件原样保留）。型号字符串在客户端做白名单过滤 + 服务端 `SanitizeFolder`/`SafeJoin` 双重防护。
+为区分同型号手机，名字后追加 4 位随机尾缀（去易混淆字符），与检测结果一起存 localStorage，同一部手机永远用同一个目录。旧版 `用户N` 与无分辨率的 `iPhone-abcd` 缓存会自动升级为新规则（旧目录和文件原样保留）。名字在客户端做白名单过滤 + 服务端 `SanitizeFolder`/`SafeJoin` 双重防护。
 
-详见 `Resources/mobile.html` 里的 `getDeviceName()` / `refineDeviceName()` 函数。
+详见 `Resources/mobile.html` 里的 `getDeviceName()` / `makeTraitName()` / `setDeviceName()`。
 
 ---
 
@@ -222,7 +223,7 @@ LanFileShare/
 
 ## 📝 更新日志
 
-完整版本记录见 [RELEASES.md](RELEASES.md)。当前 **v1.1.5**：多网卡手动选择、启动不再弹窗改为窗口内选目录、微信内置浏览器 9 张提示。
+完整版本记录见 [RELEASES.md](RELEASES.md)。当前 **v1.1.6**：手机浏览器也能识别设备（特征名兜底），并支持点击设备名手动改名。
 
 ---
 

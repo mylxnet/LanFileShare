@@ -79,6 +79,10 @@ internal static class Program
             !r.BodyText.Contains("class=\"\"btn-"));
         Check("设备名称有可靠初始化与回退", r.BodyText.Contains("deviceNameText") &&
             r.BodyText.Contains("未识别设备") && r.BodyText.Contains("detectModelFromUA"));
+        Check("设备名兜底为特征名而非用户N", r.BodyText.Contains("makeTraitName") &&
+            r.BodyText.Contains("isLegacyDeviceName") && !r.BodyText.Contains("makeFallbackUserName"));
+        Check("点击设备名可手动改名且不被自动覆盖", r.BodyText.Contains("修改设备名") &&
+            r.BodyText.Contains("setDeviceName") && r.BodyText.Contains("deviceNameManual"));
         Check("文件选择器使用移动端兼容 label", r.BodyText.Contains("<label class=\"drop-zone\"") &&
             r.BodyText.Contains("for=\"fileInput\"") && r.BodyText.Contains("type=\"file\"") &&
             !r.BodyText.Contains("style=\"display:none\""));
